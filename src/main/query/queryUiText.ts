@@ -19,40 +19,42 @@ export function getToolTransparencyText(
 ): string {
   switch (toolName) {
     case "screenshot":
-      return "taking a look..."
+      return "👀 taking a look..."
     case "left_click":
-      return "left clicking..."
+      return "👆 left clicking..."
     case "right_click":
-      return "right clicking..."
+      return "👉 right clicking..."
     case "double_click":
-      return "double clicking..."
+      return "👆 double clicking..."
     case "type_text": {
       const preview = formatTextPreview(args.text)
-      return preview ? `typing ${JSON.stringify(preview)}...` : "typing..."
+      return preview
+        ? `💬 typing ${JSON.stringify(preview)}...`
+        : "💬 typing..."
     }
     case "keyboard_hotkey": {
       const keys = Array.isArray(args.keys)
         ? args.keys.map((key) => String(key || "").trim()).filter(Boolean)
         : []
       return keys.length
-        ? `pressing ${keys.join(" + ")}...`
-        : "pressing keyboard shortcut..."
+        ? `⌨️ pressing ${keys.join(" + ")}...`
+        : "⌨️ pressing keyboard shortcut..."
     }
     case "scroll": {
       const steps = Math.round(Number(args.pixels || 0))
       const direction = steps > 0 ? "down" : steps < 0 ? "up" : ""
       const absSteps = Math.abs(steps)
-      return `scrolling ${direction} ${absSteps} step${
+      return `↕️ scrolling ${direction} ${absSteps} step${
         absSteps !== 1 ? "s" : ""
       }...`
     }
     case "drag":
-      return "dragging..."
+      return "🤏 dragging..."
     case "page_down":
-      return "pressing page down..."
+      return "⌨️ pressing page down..."
     case "page_up":
-      return "pressing page up..."
+      return "⌨️ pressing page up..."
     default:
-      return `running ${toolName}...`
+      return `⚙️ running ${toolName}...`
   }
 }
