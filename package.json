@@ -1,0 +1,110 @@
+{
+  "name": "openmnk",
+  "version": "0.1.0",
+  "description": "Open-source AI desktop agent — controls your mouse and keyboard. BYOK (bring your own key).",
+  "main": "./out/main/index.js",
+  "type": "module",
+  "author": "梁岳迪 Eddy",
+  "homepage": "https://openmnk.com",
+  "scripts": {
+    "start": "electron-vite preview",
+    "dev": "electron-vite dev",
+    "build:compile": "electron-vite build",
+    "build": "electron-vite build && electron-builder",
+    "build:win": "electron-vite build && electron-builder --win",
+    "build:mac": "electron-vite build && electron-builder --mac",
+    "build:linux": "electron-vite build && electron-builder --linux",
+    "publish": "electron-vite build && electron-builder -p always"
+  },
+  "build": {
+    "productName": "OpenMNK",
+    "appId": "com.github.emericen.openmnk",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Emericen",
+        "repo": "openmnk"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "resources/",
+        "to": ".",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "resources/atom_symbol.icns"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false
+    },
+    "linux": {
+      "category": "Productivity",
+      "target": "AppImage"
+    }
+  },
+  "dependencies": {
+    "@assistant-ui/react": "^0.12.10",
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^4.0.0",
+    "@hookform/resolvers": "^5.1.1",
+    "@lydell/node-pty": "^1.1.0",
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-dropdown-menu": "^2.1.15",
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-scroll-area": "^1.2.9",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-tooltip": "^1.2.7",
+    "dotenv": "^16.4.7",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "electron-updater": "^6.6.2",
+    "expect.js": "^0.3.1",
+    "lucide-react": "^0.522.0",
+    "openai": "^5.8.2",
+    "react-hook-form": "^7.60.0",
+    "react-markdown": "^10.1.0",
+    "sharp": "^0.34.2",
+    "tailwind-merge": "^3.3.1",
+    "tw-animate-css": "^1.3.4",
+    "zod": "^3.25.76",
+    "zustand": "^4.5.2"
+  },
+  "optionalDependencies": {
+    "@tkomde/iohook": "1.1.7",
+    "iohook-macos": "^1.1.0"
+  },
+  "iohook": {
+    "targets": [
+      "electron-133"
+    ],
+    "platforms": [
+      "darwin",
+      "win32"
+    ],
+    "arches": [
+      "x64"
+    ]
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.10",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^35.1.5",
+    "electron-builder": "^25.1.8",
+    "electron-notarize": "^1.1.1",
+    "electron-rebuild": "^3.2.9",
+    "electron-vite": "^3.1.0",
+    "playwright": "^1.58.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwindcss": "^4.1.10",
+    "vite": "^6.2.6"
+  }
+}
