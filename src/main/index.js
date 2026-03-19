@@ -85,12 +85,15 @@ app.whenReady().then(async () => {
     }
 
     try {
+      console.log("[dictation] transcribing audio...")
       const result = await transcribeAudio({
         audio: payload.audio,
         filename: payload.filename || "recording.webm"
       })
+      console.log("[dictation] result:", { success: true, textLength: result?.text?.length })
       return { success: true, text: String(result?.text || "") }
     } catch (error) {
+      console.error("[dictation] error:", error?.message || error)
       return { success: false, error: String(error?.message || error) }
     }
   }

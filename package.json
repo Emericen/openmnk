@@ -9,44 +9,7 @@
   "scripts": {
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
-    "build:compile": "electron-vite build",
-    "build": "electron-vite build && electron-builder",
-    "build:win": "electron-vite build && electron-builder --win",
-    "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux",
-    "publish": "electron-vite build && electron-builder -p always"
-  },
-  "build": {
-    "productName": "OpenMNK",
-    "appId": "com.github.emericen.openmnk",
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "Emericen",
-        "repo": "openmnk"
-      }
-    ],
-    "extraResources": [
-      {
-        "from": "resources/",
-        "to": ".",
-        "filter": ["**/*"]
-      }
-    ],
-    "mac": {
-      "category": "public.app-category.productivity",
-      "icon": "resources/atom_symbol.icns"
-    },
-    "win": {
-      "target": "nsis"
-    },
-    "nsis": {
-      "oneClick": false
-    },
-    "linux": {
-      "category": "Productivity",
-      "target": "AppImage"
-    }
+    "build": "electron-vite build"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.12.10",
@@ -65,7 +28,6 @@
     "dotenv": "^16.4.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "electron-updater": "^6.6.2",
     "expect.js": "^0.3.1",
     "lucide-react": "^0.522.0",
     "openai": "^5.8.2",
@@ -97,8 +59,6 @@
     "@tailwindcss/vite": "^4.1.10",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^35.1.5",
-    "electron-builder": "^25.1.8",
-    "electron-notarize": "^1.1.1",
     "electron-rebuild": "^3.2.9",
     "electron-vite": "^3.1.0",
     "playwright": "^1.58.2",

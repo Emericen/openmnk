@@ -16,6 +16,53 @@ function clone(value) {
   }
 }
 
+const QueryState = Object.freeze({
+  IDLE: "idle",
+  WAITING_SERVICES: "waiting_services",
+  WAITING_USER: "waiting_user",
+  WAITING_CONTROLLER: "waiting_controller"
+})
+
+const QueryEvent = Object.freeze({
+  QUERY_STARTED: "query_started",
+  SERVICES_REQUESTED_APPROVAL: "services_requested_approval",
+  SERVICES_REQUESTED_AUTO_TOOL: "services_requested_auto_tool",
+  USER_APPROVED_ACTION: "user_approved_action",
+  USER_REJECTED_ACTION: "user_rejected_action",
+  TOOL_FINISHED: "tool_finished",
+  TOOL_FAILED: "tool_failed",
+  QUERY_FINISHED: "query_finished",
+  QUERY_FAILED: "query_failed",
+  QUERY_CANCELLED: "query_cancelled"
+})
+
+const QUERY_TRANSITIONS = Object.freeze({
+  [QueryState.IDLE]: {
+    [QueryEvent.QUERY_STARTED]: QueryState.WAITING_SERVICES
+  },
+  [QueryState.WAITING_SERVICES]: {
+    [QueryEvent.SERVICES_REQUESTED_APPROVAL]: QueryState.WAITING_USER,
+    [QueryEvent.SERVICES_REQUESTED_AUTO_TOOL]: QueryState.WAITING_CONTROLLER,
+    [QueryEvent.QUERY_FINISHED]: QueryState.IDLE,
+    [QueryEvent.QUERY_FAILED]: QueryState.IDLE,
+    [QueryEvent.QUERY_CANCELLED]: QueryState.IDLE
+  },
+  [QueryState.WAITING_USER]: {
+    [QueryEvent.USER_APPROVED_ACTION]: QueryState.WAITING_CONTROLLER,
+    [QueryEvent.USER_REJECTED_ACTION]: QueryState.WAITING_SERVICES,
+    [QueryEvent.QUERY_CANCELLED]: QueryState.IDLE,
+    [QueryEvent.QUERY_FAILED]: QueryState.IDLE,
+    [QueryEvent.QUERY_FINISHED]: QueryState.IDLE
+  },
+  [QueryState.WAITING_CONTROLLER]: {
+    [QueryEvent.TOOL_FINISHED]: QueryState.WAITING_SERVICES,
+    [QueryEvent.TOOL_FAILED]: QueryState.WAITING_SERVICES,
+    [QueryEvent.QUERY_FAILED]: QueryState.IDLE,
+    [QueryEvent.QUERY_CANCELLED]: QueryState.IDLE,
+    [QueryEvent.QUERY_FINISHED]: QueryState.IDLE
+  }
+})
+
 // ---------------------------------------------------------------------------
 // LLM configuration (from environment)
 // ---------------------------------------------------------------------------
@@ -904,41 +951,41 @@ export function createQueryProcess({
   function getToolTransparencyText(toolName, args = {}) {
     switch (toolName) {
       case "screenshot":
-        return "taking a look..."
+        return "👀 taking a look..."
       case "left_click":
-        return "left clicking..."
+        return "👆 left clicking..."
       case "right_click":
-        return "right clicking..."
+        return "👉 right clicking..."
       case "double_click":
-        return "double clicking..."
+        return "👆 double clicking..."
       case "type_text": {
         const preview = formatTextPreview(args.text)
         return preview
-          ? `typing ${JSON.stringify(preview)}...`
-          : "typing..."
+          ? `💬 typing ${JSON.stringify(preview)}...`
+          : "💬 typing..."
       }
       case "keyboard_hotkey": {
         const keys = Array.isArray(args.keys)
           ? args.keys.map((key) => String(key || "").trim()).filter(Boolean)
           : []
         return keys.length
-          ? `pressing ${keys.join(" + ")}...`
-          : "pressing keyboard shortcut..."
+          ? `⌨️ pressing ${keys.join(" + ")}...`
+          : "⌨️ pressing keyboard shortcut..."
       }
       case "scroll": {
         const steps = Math.round(Number(args.pixels || 0))
         const direction = steps > 0 ? "down" : steps < 0 ? "up" : ""
         const absSteps = Math.abs(steps)
-        return `scrolling ${direction} ${absSteps} step${absSteps !== 1 ? "s" : ""}...`
+        return `↕️ scrolling ${direction} ${absSteps} step${absSteps !== 1 ? "s" : ""}...`
       }
       case "drag":
-        return "dragging..."
+        return "🤏 dragging..."
       case "page_down":
-        return "pressing page down..."
+        return "⌨️ pressing page down..."
       case "page_up":
-        return "pressing page up..."
+        return "⌨️ pressing page up..."
       default:
-        return `running ${toolName}...`
+        return `⚙️ running ${toolName}...`
     }
   }
 
