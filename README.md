@@ -1,13 +1,13 @@
 # OpenMNK
 
-<p align="center"><img src="assets/banner-3.png" alt="OpenMNK demo" /></p>
+<p align="center"><img src="assets/banner.png" alt="OpenMNK demo" /></p>
 
-Open-source AI desktop agent that sees your screen and controls your mouse and keyboard. Operate your computer with one hand. Works with any OpenAI-compatible API.
+Open-source AI desktop agent that sees your screen and controls your mouse and keyboard. Supports both Windows and MacOS, and compatible with any OpenAI-compatible API.
 
 ### Quickstart
 
 ```bash
-git clone https://github.com/nicedayyy/openmnk.git
+git clone https://github.com/Emericen/openmnk.git
 cd openmnk
 cp .env.example .env         # add your API key
 npm install
@@ -24,7 +24,7 @@ LLM_BASE_URL=https://api.fireworks.ai/inference/v1
 LLM_MODEL=accounts/fireworks/models/kimi-k2p5
 LLM_API_KEY=your-api-key-here
 
-# Voice transcription (optional)
+# Voice transcription (optional but very useful)
 TRANSCRIBE_BASE_URL=https://audio-turbo.api.fireworks.ai/v1
 TRANSCRIBE_MODEL=whisper-v3-turbo
 TRANSCRIBE_API_KEY=your-api-key-here
@@ -39,25 +39,20 @@ I recommend [Fireworks AI](https://fireworks.ai/) for their low cost and latency
 
 Everything is driven by one key — your trigger key.
 
-1. **Tap** the trigger key to open the chat window
-2. (Optional) **Hold** the trigger key to dictate your request by voice
-3. The agent sees your screen, plans, and proposes actions
-4. **Tap** the trigger key to approve each action, or **Escape** to reject
-5. Repeat — the agent keeps going until the task is done
+1. Tap `Trigger` key to surface the chat when in overlay mode.
+2. Optionally, hold `Trigger` key to dictate your query.
+3. Press `Enter` to submit your query.
+   1. Tap `Trigger` key to approve each action. 
+   2. Tap `Escape` key to stop and tell agent to do something different.
+   3. Work until task is done.
 
-That's it. One key to talk, one key to approve. Your other hand stays free.
+<p align="center"><img src="assets/stop.png" alt="Interrupt and redirect the agent mid-task" width="420" /></p>
 
-| Shortcut | Action |
-| --- | --- |
-| Trigger tap | Open chat / approve action |
-| Hold trigger | Push-to-talk dictation |
-| Escape | Reject action / cancel query |
+That's it. One key to talk, one key to approve. You can operate your computer with one hand.
 
 ### How it works
 
-The agent takes a screenshot, sends it to an LLM with your request, and receives back tool calls — click here, type this, scroll there. Every action except screenshots requires your approval before it executes. After each action, it takes another screenshot and decides the next step.
-
-**Tools available to the agent:**
+The agent takes a screenshot, sends it to an LLM with your request, and receives back tool calls. Tools available to the agent:
 
 | Tool | Description |
 | --- | --- |
@@ -69,6 +64,8 @@ The agent takes a screenshot, sends it to an LLM with your request, and receives
 | `drag` | Click and drag between two points |
 | `page_up` `page_down` | Page navigation |
 
+After each action, it may decide to take another screenshot and continue or stop and respond to you if it thinks task is complete.
+
 ### Requirements
 
 - Node.js 18+
@@ -77,7 +74,7 @@ The agent takes a screenshot, sends it to an LLM with your request, and receives
 
 ### Tech stack
 
-Electron, React, TypeScript, Tailwind CSS. Desktop automation via [nut-js](https://github.com/nut-tree/nut.js). Global hotkeys via [iohook](https://github.com/nicedayyy/iohook-macos).
+Electron, React, TypeScript, Tailwind CSS. Desktop automation via [nut-js](https://github.com/nut-tree/nut.js). Global hotkeys via [iohook-macos](https://github.com/nicedayyy/iohook-macos) and [@tkomde/iohook](https://github.com/tkomde/iohook) (Windows).
 
 ### Contributing
 
