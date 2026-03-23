@@ -1,7 +1,7 @@
-import { resolve } from "path";
-import { defineConfig, externalizeDepsPlugin } from "electron-vite";
-import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
+import { resolve } from "path"
+import { defineConfig, externalizeDepsPlugin } from "electron-vite"
+import react from "@vitejs/plugin-react"
+import tailwindcss from "@tailwindcss/vite"
 
 export default defineConfig({
   main: {
@@ -21,7 +21,6 @@ export default defineConfig({
         input: {
           capture: resolve("src/renderer/capture/capture.html"),
           index: resolve("src/renderer/index.html"),
-          launcher: resolve("src/renderer/launcher.html"),
           overlay: resolve("src/renderer/overlay.html"),
         },
       },
@@ -34,4 +33,4 @@ export default defineConfig({
     },
     plugins: [react(), tailwindcss()],
   },
-});
+})

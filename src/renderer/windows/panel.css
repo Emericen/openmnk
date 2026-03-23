@@ -17,6 +17,11 @@
   min-height: 72px;
   padding: 12px 14px;
   overflow: hidden;
+  box-shadow: 0 2px 16px 0 oklch(0 0 0 / 0.12), 0 0 0 1px oklch(0 0 0 / 0.06);
+}
+
+.dark .panel {
+  box-shadow: 0 2px 16px 0 oklch(0 0 0 / 0.4), 0 0 0 1px oklch(1 0 0 / 0.08);
 }
 
 :root {
@@ -178,4 +183,3 @@
     transform: rotate(360deg);
   }
 }
-
