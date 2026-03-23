@@ -1,8 +1,8 @@
 # OpenMNK
 
-<p align="center"><img src="assets/banner.png" alt="OpenMNK demo" /></p>
-
 Open-source AI desktop agent that sees your screen and controls your mouse and keyboard. Supports both Windows and MacOS, and compatible with any OpenAI-compatible API.
+
+<p align="center"><img src="assets/banner.png" alt="OpenMNK demo" /></p>
 
 ### Quickstart
 
@@ -46,7 +46,7 @@ Everything is driven by one key — your trigger key.
    2. Tap `Escape` key to stop and tell agent to do something different.
    3. Work until task is done.
 
-<p align="center"><img src="assets/stop.png" alt="Interrupt and redirect the agent mid-task" width="420" /></p>
+<p align="center"><img src="assets/stop.png" alt="Interrupt and redirect the agent mid-task" width="500" /></p>
 
 That's it. One key to talk, one key to approve. You can operate your computer with one hand.
 
