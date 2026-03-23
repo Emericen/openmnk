@@ -25,7 +25,7 @@ import type {
 
 type OverlayPayload = OverlayState & {
   acceptKeyLabel?: string
-  denyKeyLabel?: string
+  stopKeyLabel?: string
 }
 
 export function createWindowsSurface() {

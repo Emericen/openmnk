@@ -12,12 +12,12 @@ type TriggerKeyName =
   | string
 
 type OverlayShortcutHints =
-  | { denyKeyLabel: string; denyHintText: string }
+  | { stopKeyLabel: string; stopHintText: string }
   | {
       acceptKeyLabel: string
-      denyKeyLabel: string
+      stopKeyLabel: string
       acceptHintText: string
-      denyHintText: string
+      stopHintText: string
     }
 
 type TriggerCallbackPayload = {
@@ -177,20 +177,20 @@ export function getOverlayShortcutHints(
   mode: TriggerMode = "action"
 ): OverlayShortcutHints {
   const acceptKeyLabel = normalizeDisplayKey(TRIGGER_CONFIG.triggerKey)
-  const denyKeyLabel = normalizeDisplayKey("escape")
+  const stopKeyLabel = normalizeDisplayKey("escape")
 
   if (mode === "loading") {
     return {
-      denyKeyLabel,
-      denyHintText: `Deny (${denyKeyLabel})`,
+      stopKeyLabel,
+      stopHintText: `Stop (${stopKeyLabel})`,
     }
   }
 
   return {
     acceptKeyLabel,
-    denyKeyLabel,
+    stopKeyLabel,
     acceptHintText: `Accept (${acceptKeyLabel})`,
-    denyHintText: `Deny (${denyKeyLabel})`,
+    stopHintText: `Stop (${stopKeyLabel})`,
   }
 }
 

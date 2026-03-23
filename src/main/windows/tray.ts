@@ -33,6 +33,24 @@ function buildTrayMenu() {
       click: () => onShowWindow?.(),
     },
     { type: "separator" },
+    { label: "Chat Window", enabled: false },
+    {
+      label: "Windowed",
+      type: "radio",
+      checked: chatWindowMode === "windowed",
+      click: () => {
+        onChatWindowModeChange?.("windowed")
+      },
+    },
+    {
+      label: "Always on Top Overlay",
+      type: "radio",
+      checked: chatWindowMode === "overlay",
+      click: () => {
+        onChatWindowModeChange?.("overlay")
+      },
+    },
+    { type: "separator" },
     { label: "Appearance", enabled: false },
     {
       label: "Light Mode",
@@ -56,24 +74,6 @@ function buildTrayMenu() {
       checked: appearance === "system",
       click: () => {
         onAppearanceChange?.("system")
-      },
-    },
-    { type: "separator" },
-    { label: "Chat Window", enabled: false },
-    {
-      label: "Windowed (with frame)",
-      type: "radio",
-      checked: chatWindowMode === "windowed",
-      click: () => {
-        onChatWindowModeChange?.("windowed")
-      },
-    },
-    {
-      label: "Overlay (frameless, always on top)",
-      type: "radio",
-      checked: chatWindowMode === "overlay",
-      click: () => {
-        onChatWindowModeChange?.("overlay")
       },
     },
     { type: "separator" },

@@ -15,6 +15,7 @@ type ScreenshotResult =
   | { success: false; error: string }
 
 export type ExternalCaptureFn = () => Promise<string | null>
+export type ContentProtectionFn = (enabled: boolean) => void
 
 export function createScreenListener() {
   let scaleX = 1
@@ -22,6 +23,11 @@ export function createScreenListener() {
   let lastScreenshotWidth = 1280
   let lastScreenshotHeight = 720
   let externalCapture: ExternalCaptureFn | null = null
+  let contentProtectionFn: ContentProtectionFn | null = null
+
+  function setContentProtection(fn: ContentProtectionFn) {
+    contentProtectionFn = fn
+  }
 
   function setExternalCapture(fn: ExternalCaptureFn) {
     externalCapture = fn
@@ -35,21 +41,11 @@ export function createScreenListener() {
     const width = Math.max(1, lastScreenshotWidth || 1)
     const height = Math.max(1, lastScreenshotHeight || 1)
 
-    if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1) {
-      return {
-        x: Math.round(nx * width),
-        y: Math.round(ny * height),
-      }
+    // All coordinates use the 0-1000 scale (0 = left/top edge, 1000 = right/bottom edge)
+    return {
+      x: Math.round((Math.max(0, Math.min(1000, nx)) / 1000) * width),
+      y: Math.round((Math.max(0, Math.min(1000, ny)) / 1000) * height),
     }
-
-    if (nx >= 0 && nx <= 1000 && ny >= 0 && ny <= 1000) {
-      return {
-        x: Math.round((nx / 1000) * width),
-        y: Math.round((ny / 1000) * height),
-      }
-    }
-
-    return { x: Math.round(nx), y: Math.round(ny) }
   }
 
   function toScreenPoint(x: unknown, y: unknown): ScreenPoint {
@@ -70,6 +66,15 @@ export function createScreenListener() {
   }
 
   async function takeScreenshot(): Promise<ScreenshotResult> {
+    contentProtectionFn?.(true)
+    try {
+      return await takeScreenshotInner()
+    } finally {
+      contentProtectionFn?.(false)
+    }
+  }
+
+  async function takeScreenshotInner(): Promise<ScreenshotResult> {
     if (externalCapture) {
       try {
         const dataUrl = await externalCapture()
@@ -229,5 +234,6 @@ export function createScreenListener() {
     takeScreenshot,
     takeScreenshotWithAnnotation,
     setExternalCapture,
+    setContentProtection,
   }
 }

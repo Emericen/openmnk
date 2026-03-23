@@ -117,9 +117,6 @@ export function createKeyboardController({
 
   async function typeText(text: unknown): Promise<void> {
     const value = String(text || "")
-    console.log(
-      `[type_text] method=${TYPE_TEXT_METHOD} length=${value.length} text=${JSON.stringify(value)}`
-    )
     await wait(keyDelay)
     if (TYPE_TEXT_METHOD === "clipboard") {
       clipboard.writeText(value)

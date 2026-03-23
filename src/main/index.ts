@@ -12,9 +12,11 @@ import {
 import { createWindowsSurface } from "./windows/index"
 import {
   setChatWindowMode,
+  setChatWindowContentProtection,
   recreateChatWindow,
   type ChatWindowMode,
 } from "./windows/chat"
+import { setOverlayContentProtection } from "./windows/overlay"
 import { createTriggerListener } from "./listener/trigger"
 import { createController } from "./controller/index"
 import { createQueryProcess } from "./query"
@@ -199,6 +201,11 @@ app.whenReady().then(async () => {
   if (captureFn) {
     controller.setExternalCapture(() => captureFn())
   }
+
+  controller.setContentProtection((enabled) => {
+    setChatWindowContentProtection(enabled)
+    setOverlayContentProtection(enabled)
+  })
 
   createSystemTray({
     onShowWindow: () => {

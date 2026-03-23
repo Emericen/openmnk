@@ -29,7 +29,7 @@ function OverlayApp() {
   const type = useOverlayStore((s) => s.type)
   const text = useOverlayStore((s) => s.text)
   const acceptHintText = useOverlayStore((s) => s.acceptHintText)
-  const denyHintText = useOverlayStore((s) => s.denyHintText)
+  const stopHintText = useOverlayStore((s) => s.stopHintText)
   const setPayload = useOverlayStore((s) => s.setPayload)
 
   const loading = type === "loading"
@@ -94,7 +94,7 @@ function OverlayApp() {
           <div className="right-zone">
             {showShortcutHints ? (
               <div className="accept-indicator">
-                {[acceptHintText, denyHintText].filter(Boolean).join("  ")}
+                {[acceptHintText, stopHintText].filter(Boolean).join("  ")}
               </div>
             ) : null}
           </div>

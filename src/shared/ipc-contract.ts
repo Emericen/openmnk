@@ -63,13 +63,13 @@ export type OverlayState =
   | {
       type: "loading"
       text: string
-      denyHintText?: string
+      stopHintText?: string
     }
   | {
       type: "action"
       text: string
       acceptHintText?: string
-      denyHintText?: string
+      stopHintText?: string
     }
   | { type: "message"; text: string }
   | { type: "failure"; text: string }

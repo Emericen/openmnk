@@ -1,6 +1,6 @@
 import { createMouseController } from "./mouse"
 import { createKeyboardController } from "./keyboard"
-import { createScreenListener, type ExternalCaptureFn } from "../listener/screen"
+import { createScreenListener, type ExternalCaptureFn, type ContentProtectionFn } from "../listener/screen"
 import { parseToolArgs } from "../query/queryTools"
 
 const ACTION_DELAY_MS = 100
@@ -152,9 +152,6 @@ export function createController() {
       }
       case "type_text": {
         const parsed = parseToolArgs("type_text", args)
-        console.log(
-          `[controller.execute] type_text text=${JSON.stringify(parsed.text)}`
-        )
         await keyboard.typeText(parsed.text)
         break
       }
@@ -191,6 +188,10 @@ export function createController() {
     screen.setExternalCapture(fn)
   }
 
+  function setContentProtection(fn: ContentProtectionFn) {
+    screen.setContentProtection(fn)
+  }
+
   return {
     preview,
     execute,
@@ -199,5 +200,6 @@ export function createController() {
     runFirstTimeOnboarding,
     cleanup,
     setExternalCapture,
+    setContentProtection,
   }
 }

@@ -12,7 +12,7 @@ import type { OverlayState } from "../../shared/ipc-contract"
 
 type OverlayPayload = OverlayState & {
   acceptKeyLabel?: string
-  denyKeyLabel?: string
+  stopKeyLabel?: string
 }
 
 let overlayWindow: BrowserWindow | null = null
@@ -60,7 +60,7 @@ export function createOverlayWindow(): BrowserWindow {
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
-    hasShadow: false,
+    hasShadow: true,
     focusable: false,
     webPreferences: {
       preload: join(__dirname, "../preload/index.mjs"),
@@ -109,6 +109,11 @@ export function hideOverlayWindow() {
   overlayWindow.setFocusable(false)
   overlayWindow.setIgnoreMouseEvents(true, { forward: true })
   overlayWindow.hide()
+}
+
+export function setOverlayContentProtection(enabled: boolean): void {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return
+  overlayWindow.setContentProtection(enabled)
 }
 
 export function setOverlayHeight(height: unknown): void {

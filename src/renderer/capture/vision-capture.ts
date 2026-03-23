@@ -207,7 +207,9 @@ if (!window.openmnk) {
     console.log("[capture] received command:", message.type)
     if (message.type === "source-id") {
       console.log("[capture] starting capture with source:", message.sourceId)
-      const { width, height } = window.screen
+      const dpr = window.devicePixelRatio || 1
+      const width = Math.round(window.screen.width * dpr)
+      const height = Math.round(window.screen.height * dpr)
       const capture = new ScreenCapture(width, height)
       const started = await capture.startCapture(message.sourceId)
       if (started) {

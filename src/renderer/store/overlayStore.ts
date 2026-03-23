@@ -5,18 +5,18 @@ type OverlayPayload = Partial<{
   type: OverlayState["type"]
   text: string
   acceptKeyLabel: string
-  denyKeyLabel: string
+  stopKeyLabel: string
   acceptHintText: string
-  denyHintText: string
+  stopHintText: string
 }>
 
 type OverlayStoreState = {
   type: OverlayState["type"]
   text: string
   acceptKeyLabel: string
-  denyKeyLabel: string
+  stopKeyLabel: string
   acceptHintText: string
-  denyHintText: string
+  stopHintText: string
   setPayload: (payload: OverlayPayload) => void
 }
 
@@ -24,16 +24,16 @@ export const useOverlayStore = create<OverlayStoreState>((set) => ({
   type: "message",
   text: "",
   acceptKeyLabel: "",
-  denyKeyLabel: "",
+  stopKeyLabel: "",
   acceptHintText: "",
-  denyHintText: "",
+  stopHintText: "",
   setPayload: (payload = {}) =>
     set({
       type: payload.type || "message",
       text: String(payload.text || ""),
       acceptKeyLabel: String(payload.acceptKeyLabel || ""),
-      denyKeyLabel: String(payload.denyKeyLabel || ""),
+      stopKeyLabel: String(payload.stopKeyLabel || ""),
       acceptHintText: String(payload.acceptHintText || ""),
-      denyHintText: String(payload.denyHintText || ""),
+      stopHintText: String(payload.stopHintText || ""),
     }),
 }))
