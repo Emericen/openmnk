@@ -1,6 +1,6 @@
 # OpenMNK
 
-Open-source AI desktop agent that sees your screen and controls your mouse and keyboard. Supports both Windows and MacOS, and compatible with any OpenAI-compatible API.
+Open-source desktop tool that lets LLM see your screen and use mouse and keyboard. Plug in any OpenAI-compatible model and let it operate your computer.
 
 <p align="center"><img src="assets/banner.png" alt="OpenMNK demo" /></p>
 
@@ -65,6 +65,8 @@ The agent takes a screenshot, sends it to an LLM with your request, and receives
 | `page_up` `page_down` | Page navigation |
 
 After each action, it may decide to take another screenshot and continue or stop and respond to you if it thinks task is complete.
+
+**A note on resolution:** Screenshots are resized to 720p height before being sent to the model. On laptops this typically works well since text stays readable at that resolution. On large high-resolution external monitors (4K+), text may appear small in the resized screenshot and the model may struggle with precision. If you experience this, try lowering your display resolution or increasing your OS text scaling.
 
 ### Requirements
 
