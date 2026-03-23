@@ -1,6 +1,6 @@
 # OpenMNK
 
-<p align="center"><img src="assets/banner-2.png" alt="OpenMNK demo" /></p>
+<p align="center"><img src="assets/banner-3.png" alt="OpenMNK demo" /></p>
 
 Open-source AI desktop agent that sees your screen and controls your mouse and keyboard. Operate your computer with one hand. Works with any OpenAI-compatible API.
 
