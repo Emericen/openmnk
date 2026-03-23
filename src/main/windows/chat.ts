@@ -25,6 +25,7 @@ let previouslyFocusedWindow: BrowserWindow | null = null
 let isChatRendererReady = false
 let pendingRendererEvents: PendingRendererEvent[] = []
 let chatWindowMode: ChatWindowMode = "windowed"
+let isRecreating = false
 const IS_E2E_HIDDEN =
   process.env.E2E_TEST === "1" && process.env.E2E_HIDE_WINDOW === "1"
 
@@ -73,7 +74,7 @@ export function createChatWindow(): BrowserWindow {
     show: false,
     resizable: !isOverlay,
     autoHideMenuBar: true,
-    ...(process.platform === "linux" ? { icon: whiteIcon } : {}),
+    icon: whiteIcon,
     webPreferences: {
       preload: join(__dirname, "../preload/index.mjs"),
       sandbox: false,
@@ -119,9 +120,11 @@ export function createChatWindow(): BrowserWindow {
   }
 
   if (!isOverlay) {
-    // Windowed mode: closing the window quits the app
+    // Windowed mode: closing the window quits the app (unless recreating)
     window.on("close", () => {
-      app.quit()
+      if (!isRecreating) {
+        app.quit()
+      }
     })
   }
 
@@ -267,12 +270,14 @@ export function getChatWindowMode(): ChatWindowMode {
 }
 
 export function recreateChatWindow(): BrowserWindow {
+  isRecreating = true
   if (chatWindow && !chatWindow.isDestroyed()) {
-    chatWindow.close()
+    chatWindow.destroy()
   }
   chatWindow = null
   chatWebContents = null
   isChatRendererReady = false
   pendingRendererEvents = []
+  isRecreating = false
   return createChatWindow()
 }

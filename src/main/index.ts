@@ -42,7 +42,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.whenReady().then(async () => {
-  electronApp.setAppUserModelId("com.electron")
+  electronApp.setAppUserModelId("com.openmnk")
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
@@ -226,6 +226,8 @@ app.whenReady().then(async () => {
       setChatWindowMode(mode)
       setTrayChatWindowMode(mode)
       recreateChatWindow()
+      // Ensure the new window is visible after switching modes
+      ui.chat.show()
       await saveSettings()
     },
     onQuit: () => app.quit(),
