@@ -37,7 +37,8 @@ export function createController() {
       }
       case "right_click":
       case "double_click":
-      case "scroll": {
+      case "scroll_down":
+      case "scroll_up": {
         const parsed = parseToolArgs("left_click", args)
         await mouse.previewPoint(screen.toScreenPoint(parsed.x, parsed.y))
         return {}
@@ -71,11 +72,13 @@ export function createController() {
         const parsed = parseToolArgs("keyboard_hotkey", args)
         return `Execute keyboard shortcut: ${parsed.keys.join(" + ")}?`
       }
-      case "scroll": {
-        const parsed = parseToolArgs("scroll", args)
-        const direction = parsed.pixels > 0 ? "down" : "up"
-        const absSteps = Math.abs(parsed.pixels)
-        return `Scroll ${direction} ${absSteps} step${absSteps !== 1 ? "s" : ""}?`
+      case "scroll_down": {
+        const parsed = parseToolArgs("scroll_down", args)
+        return `Scroll down ${parsed.amount} step${parsed.amount !== 1 ? "s" : ""}?`
+      }
+      case "scroll_up": {
+        const parsed = parseToolArgs("scroll_up", args)
+        return `Scroll up ${parsed.amount} step${parsed.amount !== 1 ? "s" : ""}?`
       }
       case "drag":
         return "Drag and drop here?"
@@ -131,11 +134,19 @@ export function createController() {
         )
         break
       }
-      case "scroll": {
-        const parsed = parseToolArgs("scroll", args)
+      case "scroll_down": {
+        const parsed = parseToolArgs("scroll_down", args)
         await mouse.scroll(
           screen.toScreenPoint(parsed.x, parsed.y),
-          parsed.pixels
+          Math.abs(parsed.amount)
+        )
+        break
+      }
+      case "scroll_up": {
+        const parsed = parseToolArgs("scroll_up", args)
+        await mouse.scroll(
+          screen.toScreenPoint(parsed.x, parsed.y),
+          -Math.abs(parsed.amount)
         )
         break
       }
