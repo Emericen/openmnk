@@ -29,7 +29,7 @@ let isRecreating = false
 const IS_E2E_HIDDEN =
   process.env.E2E_TEST === "1" && process.env.E2E_HIDE_WINDOW === "1"
 
-// Reusable white square icon (16x16) for Linux where BrowserWindow expects an icon
+// Reusable white square icon (16x16)
 const WHITE_ICON_SIZE = 16
 const whiteBuf = Buffer.alloc(WHITE_ICON_SIZE * WHITE_ICON_SIZE * 4, 255)
 const whiteIcon = nativeImage.createFromBuffer(whiteBuf, {
@@ -147,7 +147,18 @@ export function createChatWindow(): BrowserWindow {
 }
 
 export function toggleChatWindow() {
-  if (chatWindow) {
+  if (!chatWindow) return
+
+  if (chatWindowMode === "windowed") {
+    // Windowed: minimize/restore
+    if (chatWindow.isMinimized() || !chatWindow.isFocused()) {
+      chatWindow.restore()
+      chatWindow.focus()
+    } else {
+      chatWindow.minimize()
+    }
+  } else {
+    // Overlay: hide/show
     if (chatWindow.isVisible()) {
       hideChatWindow()
     } else {

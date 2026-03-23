@@ -9,7 +9,6 @@ import {
   setTrayAppearance,
   setTrayChatWindowMode,
 } from "./windows/tray"
-import { hideLauncherWindow } from "./windows/launcher"
 import { createWindowsSurface } from "./windows/index"
 import {
   setChatWindowMode,
@@ -163,20 +162,6 @@ app.whenReady().then(async () => {
     return { success: true, skills: [] }
   })
 
-  ipcMain.on(
-    "launcher:submit",
-    async (_event, payload: { query?: string } = {}) => {
-      const query = String(payload.query || "").trim()
-      if (!query) return
-      hideLauncherWindow()
-      await queryProcess.start({ source: "query", query, threadId: null })
-    }
-  )
-
-  ipcMain.on("launcher:dismiss", () => {
-    hideLauncherWindow()
-  })
-
   const triggerListener = await createTriggerListener({
     onTriggerHoldStart: () => {
       if (queryProcess.getInteractionState() !== "idle") return
@@ -216,6 +201,9 @@ app.whenReady().then(async () => {
   }
 
   createSystemTray({
+    onShowWindow: () => {
+      ui.chat.show()
+    },
     onAppearanceChange: async (mode: AppearanceMode) => {
       appearance = mode
       applyAppearance()

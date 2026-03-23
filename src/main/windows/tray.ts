@@ -10,6 +10,7 @@ type AppearanceMode = "light" | "dark" | "system"
 type ChatWindowMode = "overlay" | "windowed"
 type TrayCallbacks = {
   onQuit?: () => void
+  onShowWindow?: () => void
   onAppearanceChange?: (mode: AppearanceMode) => void
   onChatWindowModeChange?: (mode: ChatWindowMode) => void
 }
@@ -22,11 +23,16 @@ let trayState = {
 }
 
 function buildTrayMenu() {
-  const { onQuit, onAppearanceChange, onChatWindowModeChange } =
+  const { onQuit, onShowWindow, onAppearanceChange, onChatWindowModeChange } =
     trayCallbacks || {}
   const { appearance, chatWindowMode } = trayState || {}
 
   const items: MenuItemConstructorOptions[] = [
+    {
+      label: "Show Window",
+      click: () => onShowWindow?.(),
+    },
+    { type: "separator" },
     { label: "Appearance", enabled: false },
     {
       label: "Light Mode",
