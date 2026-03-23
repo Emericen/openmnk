@@ -222,7 +222,8 @@ export function createQueryProcess({
           query: active,
         })
         try {
-          const result = await executePendingAction(pending)
+          // Execute directly (bypass executePendingAction which hides overlay)
+          const result = await controller.execute(pending.toolName, pending.args || {})
           if (!isQueryCurrent(active.queryId)) return
 
           await dispatch(QueryEvent.TOOL_FINISHED)

@@ -12,6 +12,8 @@ import { is } from "@electron-toolkit/utils"
 import type { DictationCommand, QueryEvent } from "../../shared/ipc-contract"
 
 // ========== CHAT WINDOW STATE ==========
+export type ChatWindowMode = "overlay" | "windowed"
+
 type PendingRendererEvent = {
   channel: "query:event" | "dictation:command"
   payload: QueryEvent | DictationCommand
@@ -22,6 +24,7 @@ let chatWebContents: WebContents | null = null
 let previouslyFocusedWindow: BrowserWindow | null = null
 let isChatRendererReady = false
 let pendingRendererEvents: PendingRendererEvent[] = []
+let chatWindowMode: ChatWindowMode = "windowed"
 const IS_E2E_HIDDEN =
   process.env.E2E_TEST === "1" && process.env.E2E_HIDE_WINDOW === "1"
 
@@ -59,6 +62,8 @@ export function createChatWindow(): BrowserWindow {
     y = screenHeight - windowHeight
   }
 
+  const isOverlay = chatWindowMode === "overlay"
+
   // Create the browser window.
   const windowOptions: BrowserWindowConstructorOptions = {
     width: windowWidth,
@@ -66,14 +71,15 @@ export function createChatWindow(): BrowserWindow {
     x: x,
     y: y,
     show: false,
-    resizable: false,
+    resizable: !isOverlay,
     autoHideMenuBar: true,
     ...(process.platform === "linux" ? { icon: whiteIcon } : {}),
     webPreferences: {
       preload: join(__dirname, "../preload/index.mjs"),
       sandbox: false,
     },
-    frame: false,
+    frame: !isOverlay,
+    title: "OpenMNK",
   }
 
   chatWindow = new BrowserWindow(windowOptions)
@@ -81,7 +87,10 @@ export function createChatWindow(): BrowserWindow {
   chatWebContents = window.webContents
   isChatRendererReady = false
 
-  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  if (isOverlay) {
+    window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    window.setAlwaysOnTop(true, "screen-saver", 1)
+  }
 
   // Open external links in the user's default browser instead of new Electron windows
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -94,7 +103,6 @@ export function createChatWindow(): BrowserWindow {
       shell.openExternal(url)
     }
   })
-  window.setAlwaysOnTop(true, "screen-saver", 1)
   window.setContentProtection(false)
 
   window.on("ready-to-show", () => {
@@ -102,11 +110,21 @@ export function createChatWindow(): BrowserWindow {
     showChatWindow()
   })
 
-  window.on("blur", () => {
-    if (chatWindow?.isVisible()) {
-      hideChatWindow()
-    }
-  })
+  if (isOverlay) {
+    window.on("blur", () => {
+      if (chatWindow?.isVisible()) {
+        hideChatWindow()
+      }
+    })
+  }
+
+  if (!isOverlay) {
+    // Windowed mode: closing the window quits the app
+    window.on("close", () => {
+      app.quit()
+    })
+  }
+
   window.on("closed", () => {
     chatWebContents = null
     chatWindow = null
@@ -238,4 +256,23 @@ export function setChatWindowContentProtection(enabled: boolean): void {
   if (chatWindow) {
     chatWindow.setContentProtection(enabled)
   }
+}
+
+export function setChatWindowMode(mode: ChatWindowMode): void {
+  chatWindowMode = mode
+}
+
+export function getChatWindowMode(): ChatWindowMode {
+  return chatWindowMode
+}
+
+export function recreateChatWindow(): BrowserWindow {
+  if (chatWindow && !chatWindow.isDestroyed()) {
+    chatWindow.close()
+  }
+  chatWindow = null
+  chatWebContents = null
+  isChatRendererReady = false
+  pendingRendererEvents = []
+  return createChatWindow()
 }

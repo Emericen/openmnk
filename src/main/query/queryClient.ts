@@ -208,6 +208,7 @@ export class QueryClient implements QueryRunner {
 
     if (this.#pendingToolCalls.length > 0) {
       const next = this.#pendingToolCalls[0]
+      if (!next) return
       this.#state.pendingCallId = next.id
       this.emit({
         type: "tool_call",
@@ -266,6 +267,7 @@ export class QueryClient implements QueryRunner {
 
       this.#pendingToolCalls = toolCalls
       const first = this.#pendingToolCalls[0]
+      if (!first) return
       this.#state.pendingCallId = first.id
       this.emit({
         type: "tool_call",
@@ -303,7 +305,9 @@ export class QueryClient implements QueryRunner {
         temperature: LLM_TEMPERATURE,
       })
       .then((response) => {
-        const choice = response.choices[0].message
+        const firstChoice = response.choices[0]
+        if (!firstChoice) throw new Error("No response choice from LLM")
+        const choice = firstChoice.message
         return {
           text: choice.content || "",
           toolCalls: (choice.tool_calls || []) as ToolCallRecord[],
@@ -333,7 +337,7 @@ export class QueryClient implements QueryRunner {
 
     for (let i = 0; i < this.#messages.length; i += 1) {
       const msg = this.#messages[i]
-      if (!Array.isArray(msg.content)) continue
+      if (!msg || !Array.isArray(msg.content)) continue
       const hasImage = msg.content.some(
         (part: MessageContentPart) =>
           part.type === "image_url" &&
@@ -352,7 +356,7 @@ export class QueryClient implements QueryRunner {
 
     for (const index of toPrune) {
       const msg = this.#messages[index]
-      if (!Array.isArray(msg.content)) continue
+      if (!msg || !Array.isArray(msg.content)) continue
 
       const kept = msg.content.filter(
         (part: MessageContentPart) => part.type !== "image_url"

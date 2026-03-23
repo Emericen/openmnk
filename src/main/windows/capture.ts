@@ -1,17 +1,21 @@
-import { BrowserWindow, desktopCapturer, ipcMain, shell } from "electron"
+import {
+  BrowserWindow,
+  desktopCapturer,
+  ipcMain,
+  session,
+  shell,
+} from "electron"
 import { join } from "path"
 import { is } from "@electron-toolkit/utils"
 import type { CaptureCommand } from "../../shared/ipc-contract"
 
-type CaptureFrameMessage = { type: "frame"; data: string | null }
-type CaptureRecordingMessage = { type: "recording"; data: number[] }
-type CapturePayload =
-  | Extract<CaptureCommand, { type: "request-frame" }>
-  | {
-      type: "source-id"
-      sourceId: string
-    }
-  | { type: "stop-capture" }
+type CaptureFrameMessage = { data: string | null }
+type CaptureRecordingMessage = { data: number[] }
+type CapturePayload = {
+  type: "request-frame"
+  highlightPosition?: { x: number; y: number }
+  highlightType?: "spotlight" | "crosshair"
+}
 
 let captureWindow: BrowserWindow | null = null
 
@@ -34,6 +38,23 @@ export async function createCaptureWindow() {
       sandbox: false,
     },
   })
+
+  // Auto-approve screen capture requests so getUserMedia works without a dialog
+  captureWindow.webContents.session.setDisplayMediaRequestHandler(
+    (_request, callback) => {
+      desktopCapturer
+        .getSources({ types: ["screen"], thumbnailSize: { width: 0, height: 0 } })
+        .then((sources) => {
+          const source = sources[0]
+          if (source) {
+            callback({ video: source })
+          } else {
+            callback({})
+          }
+        })
+        .catch(() => callback({}))
+    }
+  )
 
   captureWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
@@ -66,7 +87,6 @@ export async function createCaptureWindow() {
           _event: Electron.IpcMainEvent,
           message: CaptureFrameMessage
         ) => {
-          if (message.type !== "frame") return
           clearTimeout(timeout)
           ipcMain.removeListener("capture:frame", handler)
           resolve(message.data)
@@ -104,7 +124,6 @@ export async function createCaptureWindow() {
         _event: Electron.IpcMainEvent,
         message: CaptureRecordingMessage
       ) => {
-        if (message.type !== "recording") return
         clearTimeout(timeout)
         ipcMain.removeListener("capture:recording", handler)
         resolve(Buffer.from(message.data || []))
@@ -116,6 +135,8 @@ export async function createCaptureWindow() {
       })
     })
 
+  // Wait for the renderer JS to load and register its IPC listeners,
+  // then send the screen source ID to start the MediaStream.
   await new Promise<void>((resolve) => {
     const window = captureWindow
     if (!window) {
@@ -123,17 +144,42 @@ export async function createCaptureWindow() {
       return
     }
 
-    window.once("ready-to-show", async () => {
-      const sources = await desktopCapturer.getSources({
-        types: ["screen"],
-        thumbnailSize: { width: 0, height: 0 },
-      })
-      window.webContents.send("capture:command", {
-        type: "source-id",
-        sourceId: sources[0]?.id,
-      })
+    const onReady = async () => {
+      ipcMain.removeListener("capture:ready", readyHandler)
+      console.log("[capture] renderer ready, sending source-id")
+      try {
+        const sources = await desktopCapturer.getSources({
+          types: ["screen"],
+          thumbnailSize: { width: 0, height: 0 },
+        })
+        const sourceId = sources[0]?.id
+        if (sourceId) {
+          window.webContents.send("capture:command", {
+            type: "source-id",
+            sourceId,
+          })
+        } else {
+          console.warn("[capture] No screen sources found")
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        console.warn("[capture] Failed to get screen sources:", msg)
+      }
       resolve()
-    })
+    }
+
+    // The renderer sends "capture:ready" once its onCommand listener is set up
+    const readyHandler = () => {
+      void onReady()
+    }
+    ipcMain.once("capture:ready", readyHandler)
+
+    // Fallback: if ready signal doesn't arrive in 5s, try anyway
+    setTimeout(() => {
+      ipcMain.removeListener("capture:ready", readyHandler)
+      console.warn("[capture] ready signal timeout, attempting anyway")
+      void onReady()
+    }, 5000)
   })
 
   return {

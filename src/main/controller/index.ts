@@ -1,6 +1,7 @@
 import { createMouseController } from "./mouse"
 import { createKeyboardController } from "./keyboard"
-import { createScreenListener } from "../listener/screen"
+import { createScreenListener, type ExternalCaptureFn } from "../listener/screen"
+import { parseToolArgs } from "../query/queryTools"
 
 const ACTION_DELAY_MS = 100
 
@@ -26,14 +27,10 @@ export function createController() {
   ): Promise<PreviewResult> {
     switch (toolName) {
       case "left_click": {
-        if (
-          Number.isFinite(Number(args?.x)) &&
-          Number.isFinite(Number(args?.y))
-        ) {
-          await mouse.previewPoint(screen.toScreenPoint(args.x, args.y))
-        }
+        const parsed = parseToolArgs("left_click", args)
+        await mouse.previewPoint(screen.toScreenPoint(parsed.x, parsed.y))
         const annotated = await screen.takeScreenshotWithAnnotation([
-          { x: Number(args.x), y: Number(args.y), label: "1" },
+          { x: parsed.x, y: parsed.y, label: "1" },
         ])
         if (!annotated.success) return {}
         return { previewImage: `data:image/jpeg;base64,${annotated.base64}` }
@@ -41,19 +38,15 @@ export function createController() {
       case "right_click":
       case "double_click":
       case "scroll": {
-        if (
-          !Number.isFinite(Number(args?.x)) ||
-          !Number.isFinite(Number(args?.y))
-        ) {
-          return {}
-        }
-        await mouse.previewPoint(screen.toScreenPoint(args.x, args.y))
+        const parsed = parseToolArgs("left_click", args)
+        await mouse.previewPoint(screen.toScreenPoint(parsed.x, parsed.y))
         return {}
       }
       case "drag": {
+        const parsed = parseToolArgs("drag", args)
         await mouse.previewDrag(
-          screen.toScreenPoint(args.x1, args.y1),
-          screen.toScreenPoint(args.x2, args.y2)
+          screen.toScreenPoint(parsed.x1, parsed.y1),
+          screen.toScreenPoint(parsed.x2, parsed.y2)
         )
         return {}
       }
@@ -70,18 +63,18 @@ export function createController() {
         return "Right click here?"
       case "double_click":
         return "Double click here?"
-      case "type_text":
-        return `Type \"${String(args.text || "").slice(0, 120)}\"?`
-      case "keyboard_hotkey":
-        return `Execute keyboard shortcut: ${
-          Array.isArray(args.keys)
-            ? args.keys.map((key) => String(key || "")).join(" + ")
-            : ""
-        }?`
+      case "type_text": {
+        const parsed = parseToolArgs("type_text", args)
+        return `Type \"${parsed.text.slice(0, 120)}\"?`
+      }
+      case "keyboard_hotkey": {
+        const parsed = parseToolArgs("keyboard_hotkey", args)
+        return `Execute keyboard shortcut: ${parsed.keys.join(" + ")}?`
+      }
       case "scroll": {
-        const steps = Number(args.pixels || 0)
-        const direction = steps > 0 ? "down" : "up"
-        const absSteps = Math.abs(steps)
+        const parsed = parseToolArgs("scroll", args)
+        const direction = parsed.pixels > 0 ? "down" : "up"
+        const absSteps = Math.abs(parsed.pixels)
         return `Scroll ${direction} ${absSteps} step${absSteps !== 1 ? "s" : ""}?`
       }
       case "drag":
@@ -115,36 +108,50 @@ export function createController() {
           height: screenshot.height,
         }
       }
-      case "left_click":
-        await mouse.leftClick(screen.toScreenPoint(args.x, args.y))
+      case "left_click": {
+        const parsed = parseToolArgs("left_click", args)
+        await mouse.leftClick(screen.toScreenPoint(parsed.x, parsed.y))
         break
-      case "right_click":
-        await mouse.rightClick(screen.toScreenPoint(args.x, args.y))
+      }
+      case "right_click": {
+        const parsed = parseToolArgs("right_click", args)
+        await mouse.rightClick(screen.toScreenPoint(parsed.x, parsed.y))
         break
-      case "double_click":
-        await mouse.doubleClick(screen.toScreenPoint(args.x, args.y))
+      }
+      case "double_click": {
+        const parsed = parseToolArgs("double_click", args)
+        await mouse.doubleClick(screen.toScreenPoint(parsed.x, parsed.y))
         break
-      case "drag":
+      }
+      case "drag": {
+        const parsed = parseToolArgs("drag", args)
         await mouse.leftClickDrag(
-          screen.toScreenPoint(args.x1, args.y1),
-          screen.toScreenPoint(args.x2, args.y2)
+          screen.toScreenPoint(parsed.x1, parsed.y1),
+          screen.toScreenPoint(parsed.x2, parsed.y2)
         )
         break
-      case "scroll":
+      }
+      case "scroll": {
+        const parsed = parseToolArgs("scroll", args)
         await mouse.scroll(
-          screen.toScreenPoint(args.x, args.y),
-          Number(args.pixels || 0)
+          screen.toScreenPoint(parsed.x, parsed.y),
+          parsed.pixels
         )
         break
-      case "type_text":
+      }
+      case "type_text": {
+        const parsed = parseToolArgs("type_text", args)
         console.log(
-          `[controller.execute] type_text args=${JSON.stringify(args || {})}`
+          `[controller.execute] type_text text=${JSON.stringify(parsed.text)}`
         )
-        await keyboard.typeText(args.text)
+        await keyboard.typeText(parsed.text)
         break
-      case "keyboard_hotkey":
-        await keyboard.keyboardHotkey(Array.isArray(args.keys) ? args.keys : [])
+      }
+      case "keyboard_hotkey": {
+        const parsed = parseToolArgs("keyboard_hotkey", args)
+        await keyboard.keyboardHotkey(parsed.keys)
         break
+      }
       case "page_down":
         await keyboard.pageDown()
         break
@@ -169,6 +176,10 @@ export function createController() {
     // no-op
   }
 
+  function setExternalCapture(fn: ExternalCaptureFn) {
+    screen.setExternalCapture(fn)
+  }
+
   return {
     preview,
     execute,
@@ -176,5 +187,6 @@ export function createController() {
     requiresApproval,
     runFirstTimeOnboarding,
     cleanup,
+    setExternalCapture,
   }
 }

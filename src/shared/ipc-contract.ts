@@ -116,5 +116,6 @@ export type OpenmnkApi = {
     onCommand: (listener: (command: CaptureCommand) => void) => Unsubscribe
     sendFrame: (input: { data: string | null }) => void
     sendRecording: (input: { data: number[] }) => void
+    sendReady: () => void
   }
 }

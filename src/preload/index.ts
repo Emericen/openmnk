@@ -39,6 +39,7 @@ const openmnk: OpenmnkApi = {
     onCommand: (listener) => subscribe("capture:command", listener),
     sendFrame: (input) => ipcRenderer.send("capture:frame", input),
     sendRecording: (input) => ipcRenderer.send("capture:recording", input),
+    sendReady: () => ipcRenderer.send("capture:ready"),
   },
 }
 

@@ -1,3 +1,39 @@
+import { z } from "zod"
+
+const CoordSchema = z.number().int().min(0).max(1000)
+
+export const ToolArgsSchemas = {
+  screenshot: z.object({}),
+  left_click: z.object({ x: CoordSchema, y: CoordSchema }),
+  right_click: z.object({ x: CoordSchema, y: CoordSchema }),
+  double_click: z.object({ x: CoordSchema, y: CoordSchema }),
+  type_text: z.object({ text: z.string() }),
+  keyboard_hotkey: z.object({ keys: z.array(z.string()) }),
+  scroll: z.object({ x: CoordSchema, y: CoordSchema, pixels: z.number().int() }),
+  drag: z.object({
+    x1: CoordSchema,
+    y1: CoordSchema,
+    x2: CoordSchema,
+    y2: CoordSchema,
+  }),
+  page_down: z.object({}),
+  page_up: z.object({}),
+} as const
+
+export type ToolName = keyof typeof ToolArgsSchemas
+export type PointArgs = z.infer<typeof ToolArgsSchemas.left_click>
+export type TypeTextArgs = z.infer<typeof ToolArgsSchemas.type_text>
+export type KeyboardHotkeyArgs = z.infer<typeof ToolArgsSchemas.keyboard_hotkey>
+export type ScrollArgs = z.infer<typeof ToolArgsSchemas.scroll>
+export type DragArgs = z.infer<typeof ToolArgsSchemas.drag>
+
+export function parseToolArgs<T extends ToolName>(
+  toolName: T,
+  args: Record<string, unknown>
+): z.infer<(typeof ToolArgsSchemas)[T]> {
+  return ToolArgsSchemas[toolName].parse(args)
+}
+
 export const TOOLS = [
   {
     type: "function",

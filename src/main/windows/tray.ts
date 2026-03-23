@@ -7,20 +7,24 @@ import {
 } from "electron"
 
 type AppearanceMode = "light" | "dark" | "system"
+type ChatWindowMode = "overlay" | "windowed"
 type TrayCallbacks = {
   onQuit?: () => void
   onAppearanceChange?: (mode: AppearanceMode) => void
+  onChatWindowModeChange?: (mode: ChatWindowMode) => void
 }
 
 let tray: Tray | null = null
 let trayCallbacks: TrayCallbacks = {}
 let trayState = {
   appearance: "system" as AppearanceMode,
+  chatWindowMode: "windowed" as ChatWindowMode,
 }
 
 function buildTrayMenu() {
-  const { onQuit, onAppearanceChange } = trayCallbacks || {}
-  const { appearance } = trayState || {}
+  const { onQuit, onAppearanceChange, onChatWindowModeChange } =
+    trayCallbacks || {}
+  const { appearance, chatWindowMode } = trayState || {}
 
   const items: MenuItemConstructorOptions[] = [
     { label: "Appearance", enabled: false },
@@ -46,6 +50,24 @@ function buildTrayMenu() {
       checked: appearance === "system",
       click: () => {
         onAppearanceChange?.("system")
+      },
+    },
+    { type: "separator" },
+    { label: "Chat Window", enabled: false },
+    {
+      label: "Windowed (with frame)",
+      type: "radio",
+      checked: chatWindowMode === "windowed",
+      click: () => {
+        onChatWindowModeChange?.("windowed")
+      },
+    },
+    {
+      label: "Overlay (frameless, always on top)",
+      type: "radio",
+      checked: chatWindowMode === "overlay",
+      click: () => {
+        onChatWindowModeChange?.("overlay")
       },
     },
     { type: "separator" },
@@ -103,13 +125,24 @@ export function setTrayAppearance(appearance: AppearanceMode): void {
   }
 }
 
+export function setTrayChatWindowMode(mode: ChatWindowMode): void {
+  trayState = { ...trayState, chatWindowMode: mode || "windowed" }
+  if (tray) {
+    try {
+      tray.setContextMenu(buildTrayMenu())
+    } catch {
+      // no-op
+    }
+  }
+}
+
 export function destroyTray() {
   if (tray) {
     tray.destroy()
     tray = null
   }
   trayCallbacks = {}
-  trayState = { appearance: "system" }
+  trayState = { appearance: "system", chatWindowMode: "windowed" }
 }
 
 export function getTray(): Tray | null {

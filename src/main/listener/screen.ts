@@ -14,11 +14,18 @@ type ScreenshotResult =
   | { success: true; base64: string; width: number; height: number }
   | { success: false; error: string }
 
+export type ExternalCaptureFn = () => Promise<string | null>
+
 export function createScreenListener() {
   let scaleX = 1
   let scaleY = 1
   let lastScreenshotWidth = 1280
   let lastScreenshotHeight = 720
+  let externalCapture: ExternalCaptureFn | null = null
+
+  function setExternalCapture(fn: ExternalCaptureFn) {
+    externalCapture = fn
+  }
 
   function toScreenshotPixels(x: unknown, y: unknown): ScreenPoint {
     const nx = Number(x)
@@ -63,6 +70,46 @@ export function createScreenListener() {
   }
 
   async function takeScreenshot(): Promise<ScreenshotResult> {
+    if (externalCapture) {
+      try {
+        const dataUrl = await externalCapture()
+        if (dataUrl) {
+          const base64Match = dataUrl.match(
+            /^data:image\/[^;]+;base64,(.+)$/
+          )
+          const rawBase64 = base64Match?.[1] ?? dataUrl
+          const originalBuffer = Buffer.from(rawBase64, "base64")
+          const originalMeta = await sharp(originalBuffer).metadata()
+          const origW = originalMeta.width ?? 1920
+          const origH = originalMeta.height ?? 1080
+
+          const resizedBuffer = await sharp(originalBuffer)
+            .resize({ height: 720 })
+            .jpeg({ quality: 80 })
+            .toBuffer()
+
+          const resizedMeta = await sharp(resizedBuffer).metadata()
+          const resW = resizedMeta.width ?? Math.round(origW * (720 / origH))
+          const resH = resizedMeta.height ?? 720
+
+          scaleX = origW / resW
+          scaleY = origH / resH
+          lastScreenshotWidth = resW
+          lastScreenshotHeight = resH
+
+          return {
+            success: true,
+            base64: resizedBuffer.toString("base64"),
+            width: resW,
+            height: resH,
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.warn("External capture failed, falling back:", message)
+      }
+    }
+
     if (process.platform === "darwin") {
       try {
         const tempPath = path.join(os.tmpdir(), `screenshot-${Date.now()}.jpg`)
@@ -102,9 +149,8 @@ export function createScreenListener() {
         types: ["screen"],
         thumbnailSize: { width: 1920, height: 1080 },
       })
-      if (sources.length === 0) throw new Error("No screen sources available")
-
       const source = sources[0]
+      if (!source) throw new Error("No screen sources available")
       const originalSize = source.thumbnail.getSize()
       const resizedBuffer = await sharp(source.thumbnail.toPNG())
         .resize({ height: 720 })
@@ -182,5 +228,6 @@ export function createScreenListener() {
     toScreenPoint,
     takeScreenshot,
     takeScreenshotWithAnnotation,
+    setExternalCapture,
   }
 }

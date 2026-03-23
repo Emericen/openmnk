@@ -7,9 +7,15 @@ import {
   createSystemTray,
   destroyTray,
   setTrayAppearance,
+  setTrayChatWindowMode,
 } from "./windows/tray"
 import { hideLauncherWindow } from "./windows/launcher"
 import { createWindowsSurface } from "./windows/index"
+import {
+  setChatWindowMode,
+  recreateChatWindow,
+  type ChatWindowMode,
+} from "./windows/chat"
 import { createTriggerListener } from "./listener/trigger"
 import { createController } from "./controller/index"
 import { createQueryProcess } from "./query"
@@ -26,6 +32,10 @@ import type {
 // Dev toggle: force every query to run through the mock query runner.
 const FORCE_MOCK_QUERY_RUNNER = false
 type AppearanceMode = "light" | "dark" | "system"
+type SettingsData = {
+  appearance?: AppearanceMode
+  chatWindowMode?: ChatWindowMode
+}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -40,18 +50,22 @@ app.whenReady().then(async () => {
   const controller = createController()
   const settingsPath = path.join(app.getPath("userData"), "settings.json")
   let appearance: AppearanceMode = "system"
+  let chatMode: ChatWindowMode = "windowed"
 
   const ui = createWindowsSurface()
 
   async function loadSettings() {
     try {
       const raw = await fs.readFile(settingsPath, "utf-8")
-      const parsed = JSON.parse(raw) as { appearance?: AppearanceMode }
+      const parsed = JSON.parse(raw) as SettingsData
       appearance = parsed?.appearance || "system"
+      chatMode = parsed?.chatWindowMode || "windowed"
     } catch {
       appearance = "system"
+      chatMode = "windowed"
     }
     applyAppearance()
+    applyChatWindowMode()
   }
 
   function applyAppearance() {
@@ -60,11 +74,23 @@ app.whenReady().then(async () => {
     setTrayAppearance(appearance)
   }
 
+  function applyChatWindowMode() {
+    setChatWindowMode(chatMode)
+    setTrayChatWindowMode(chatMode)
+  }
+
   async function saveSettings() {
     await fs.mkdir(path.dirname(settingsPath), { recursive: true })
     await fs.writeFile(
       settingsPath,
-      JSON.stringify({ appearance: appearance || "system" }, null, 2),
+      JSON.stringify(
+        {
+          appearance: appearance || "system",
+          chatWindowMode: chatMode || "windowed",
+        },
+        null,
+        2
+      ),
       "utf-8"
     )
   }
@@ -176,18 +202,36 @@ app.whenReady().then(async () => {
       await queryProcess.cancel({ reason: "user_interrupt" })
     },
   })
-  ui.initWindows()
+  try {
+    await loadSettings()
+  } catch {
+    // defaults already set
+  }
+
+  await ui.initWindows()
+
+  const captureFn = ui.getCaptureScreenshot()
+  if (captureFn) {
+    controller.setExternalCapture(() => captureFn())
+  }
+
   createSystemTray({
     onAppearanceChange: async (mode: AppearanceMode) => {
       appearance = mode
       applyAppearance()
       await saveSettings()
     },
+    onChatWindowModeChange: async (mode: ChatWindowMode) => {
+      chatMode = mode
+      setChatWindowMode(mode)
+      setTrayChatWindowMode(mode)
+      recreateChatWindow()
+      await saveSettings()
+    },
     onQuit: () => app.quit(),
   })
 
   try {
-    await loadSettings()
     await controller.runFirstTimeOnboarding()
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

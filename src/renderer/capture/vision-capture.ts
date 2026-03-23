@@ -204,13 +204,18 @@ if (!window.openmnk) {
   console.error("window.openmnk is not available")
 } else {
   window.openmnk.capture.onCommand(async (message) => {
+    console.log("[capture] received command:", message.type)
     if (message.type === "source-id") {
+      console.log("[capture] starting capture with source:", message.sourceId)
       const { width, height } = window.screen
       const capture = new ScreenCapture(width, height)
       const started = await capture.startCapture(message.sourceId)
       if (started) {
         screenCapture = capture
         isRecording = true
+        console.log("[capture] stream started successfully")
+      } else {
+        console.error("[capture] failed to start stream")
       }
       return
     }
@@ -243,4 +248,7 @@ if (!window.openmnk) {
       })
     }
   })
+
+  // Signal to main process that the capture renderer is ready to receive commands
+  window.openmnk.capture.sendReady()
 }

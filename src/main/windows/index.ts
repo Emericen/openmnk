@@ -15,6 +15,7 @@ import {
   hideOverlayWindow,
   showOverlayWindow,
 } from "./overlay"
+import { createCaptureWindow } from "./capture"
 import { getOverlayShortcutHints } from "../listener/trigger"
 import type {
   DictationCommand,
@@ -102,15 +103,30 @@ export function createWindowsSurface() {
     },
   }
 
-  function initWindows() {
+  let captureScreenshot: ((
+    x?: number,
+    y?: number,
+    highlightType?: "spotlight" | "crosshair"
+  ) => Promise<string | null>) | null = null
+
+  async function initWindows() {
     createOverlayWindow()
     hideOverlayWindow()
     createChatWindow()
+
+    try {
+      const captureHandle = await createCaptureWindow()
+      captureScreenshot = captureHandle.captureScreenshot
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.warn("Capture window init failed, using fallback:", msg)
+    }
   }
 
   return {
     initWindows,
     overlay,
     chat,
+    getCaptureScreenshot: () => captureScreenshot,
   }
 }
