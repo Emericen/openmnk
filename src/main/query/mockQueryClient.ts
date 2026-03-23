@@ -182,8 +182,8 @@ export function createMockQueryClient({
         type: "tool_call",
         queryId: run.queryId,
         callId: "8",
-        toolName: "scroll",
-        args: { x: 500, y: 500, pixels: 420 },
+        toolName: "scroll_down",
+        args: { x: 500, y: 500, amount: 420 },
       })
       run.pendingToolCalls = [{ callId: "8" }]
       run.stage = 8

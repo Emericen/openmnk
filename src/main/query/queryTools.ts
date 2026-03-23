@@ -213,9 +213,9 @@ export const TOOLS = [
   {
     type: "function",
     function: {
-      name: "scroll",
+      name: "scroll_down",
       description:
-        "Scroll a scrollable area to reveal more content. Positive values reveal content BELOW (scroll down the page), negative values reveal content ABOVE (scroll up the page). Each unit is one scroll wheel step (~3 lines of text). Must position mouse in scrollable area first (use x, y coordinates).",
+        "Scroll down to reveal content BELOW the current view. This WILL scroll down regardless of operating system (macOS, Windows, Linux) — platform-specific scroll direction settings are handled automatically. Each unit is one scroll wheel step (~3 lines of text). Must position mouse in scrollable area first (use x, y coordinates). Use this when you want to see content further down the page.",
       parameters: {
         type: "object",
         properties: {
@@ -231,13 +231,47 @@ export const TOOLS = [
             maximum: 1000,
             description: "Y coordinate from 0 (top edge) to 1000 (bottom edge)",
           },
-          pixels: {
+          amount: {
             type: "integer",
+            minimum: 1,
             description:
-              "Scroll amount in wheel steps. Positive scrolls down, negative scrolls up.",
+              "Scroll amount in wheel steps (positive integer). Each step scrolls ~3 lines.",
           },
         },
-        required: ["x", "y", "pixels"],
+        required: ["x", "y", "amount"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "scroll_up",
+      description:
+        "Scroll up to reveal content ABOVE the current view. This WILL scroll up regardless of operating system (macOS, Windows, Linux) — platform-specific scroll direction settings are handled automatically. Each unit is one scroll wheel step (~3 lines of text). Must position mouse in scrollable area first (use x, y coordinates). Use this when you want to see content further up the page.",
+      parameters: {
+        type: "object",
+        properties: {
+          x: {
+            type: "integer",
+            minimum: 0,
+            maximum: 1000,
+            description: "X coordinate from 0 (left edge) to 1000 (right edge)",
+          },
+          y: {
+            type: "integer",
+            minimum: 0,
+            maximum: 1000,
+            description: "Y coordinate from 0 (top edge) to 1000 (bottom edge)",
+          },
+          amount: {
+            type: "integer",
+            minimum: 1,
+            description:
+              "Scroll amount in wheel steps (positive integer). Each step scrolls ~3 lines.",
+          },
+        },
+        required: ["x", "y", "amount"],
         additionalProperties: false,
       },
     },

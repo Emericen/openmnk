@@ -40,7 +40,8 @@ export function createController() {
       }
       case "right_click":
       case "double_click":
-      case "scroll": {
+      case "scroll_down":
+      case "scroll_up": {
         if (
           !Number.isFinite(Number(args?.x)) ||
           !Number.isFinite(Number(args?.y))
@@ -78,11 +79,13 @@ export function createController() {
             ? args.keys.map((key) => String(key || "")).join(" + ")
             : ""
         }?`
-      case "scroll": {
-        const steps = Number(args.pixels || 0)
-        const direction = steps > 0 ? "down" : "up"
-        const absSteps = Math.abs(steps)
-        return `Scroll ${direction} ${absSteps} step${absSteps !== 1 ? "s" : ""}?`
+      case "scroll_down": {
+        const steps = Math.abs(Number(args.amount || 0))
+        return `Scroll down ${steps} step${steps !== 1 ? "s" : ""}?`
+      }
+      case "scroll_up": {
+        const steps = Math.abs(Number(args.amount || 0))
+        return `Scroll up ${steps} step${steps !== 1 ? "s" : ""}?`
       }
       case "drag":
         return "Drag and drop here?"
@@ -130,10 +133,16 @@ export function createController() {
           screen.toScreenPoint(args.x2, args.y2)
         )
         break
-      case "scroll":
+      case "scroll_down":
         await mouse.scroll(
           screen.toScreenPoint(args.x, args.y),
-          Number(args.pixels || 0)
+          Math.abs(Number(args.amount || 0))
+        )
+        break
+      case "scroll_up":
+        await mouse.scroll(
+          screen.toScreenPoint(args.x, args.y),
+          -Math.abs(Number(args.amount || 0))
         )
         break
       case "type_text":

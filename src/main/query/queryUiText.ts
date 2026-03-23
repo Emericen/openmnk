@@ -1,7 +1,7 @@
 type QueryUiArgs = {
   text?: string
   keys?: unknown[]
-  pixels?: number
+  amount?: number
 }
 
 function formatTextPreview(value: unknown, maxLength = 80): string {
@@ -40,13 +40,13 @@ export function getToolTransparencyText(
         ? `⌨️ pressing ${keys.join(" + ")}...`
         : "⌨️ pressing keyboard shortcut..."
     }
-    case "scroll": {
-      const steps = Math.round(Number(args.pixels || 0))
-      const direction = steps > 0 ? "down" : steps < 0 ? "up" : ""
-      const absSteps = Math.abs(steps)
-      return `↕️ scrolling ${direction} ${absSteps} step${
-        absSteps !== 1 ? "s" : ""
-      }...`
+    case "scroll_down": {
+      const steps = Math.abs(Math.round(Number(args.amount || 0)))
+      return `⬇️ scrolling down ${steps} step${steps !== 1 ? "s" : ""}...`
+    }
+    case "scroll_up": {
+      const steps = Math.abs(Math.round(Number(args.amount || 0)))
+      return `⬆️ scrolling up ${steps} step${steps !== 1 ? "s" : ""}...`
     }
     case "drag":
       return "🤏 dragging..."
