@@ -84,3 +84,7 @@ Electron, React, TypeScript, Tailwind CSS. Desktop automation via [nut-js](https
 npm run check    # typecheck + lint + format + tests
 npm run dev      # development mode with hot reload
 ```
+
+### License
+
+[Apache-2.0](LICENSE)
