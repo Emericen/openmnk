@@ -6,6 +6,7 @@
   "type": "module",
   "author": "梁岳迪 Eddy",
   "homepage": "https://openmnk.com",
+  "license": "Apache-2.0",
   "scripts": {
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
