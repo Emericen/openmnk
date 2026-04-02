@@ -192,15 +192,21 @@ export class QueryClient implements QueryRunner {
   async cancel({ queryId }: { queryId?: string }) {
     if (!this.#state.isRunning) return false
     if (queryId && this.#state.queryId !== queryId) return false
-    this.#resetActiveQuery()
+    this.#resetActiveQuery({ preservePendingToolCalls: true })
     return true
   }
 
-  #resetActiveQuery() {
+  #resetActiveQuery({
+    preservePendingToolCalls = false,
+  }: {
+    preservePendingToolCalls?: boolean
+  } = {}) {
     this.#state.queryId = null
     this.#state.isRunning = false
     this.#state.pendingCallId = null
-    this.#pendingToolCalls = []
+    if (!preservePendingToolCalls) {
+      this.#pendingToolCalls = []
+    }
   }
 
   async #nextStep(queryId: string) {
@@ -294,16 +300,17 @@ export class QueryClient implements QueryRunner {
       { role: "system", content: systemMessage },
       ...this.#messages,
     ]
+    const request: Record<string, unknown> = {
+      model: LLM_MODEL,
+      messages: messages as never,
+      tools: TOOLS as never,
+      tool_choice: "auto",
+      temperature: LLM_TEMPERATURE,
+      max_completion_tokens: LLM_MAX_TOKENS,
+    }
 
     return this.openai.chat.completions
-      .create({
-        model: LLM_MODEL,
-        messages: messages as never,
-        tools: TOOLS as never,
-        tool_choice: "auto",
-        max_tokens: LLM_MAX_TOKENS,
-        temperature: LLM_TEMPERATURE,
-      })
+      .create(request as never)
       .then((response) => {
         const firstChoice = response.choices[0]
         if (!firstChoice) throw new Error("No response choice from LLM")
