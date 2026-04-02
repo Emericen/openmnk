@@ -383,3 +383,11 @@ export const TOOLS = [
     },
   },
 ] as const
+
+export const RESPONSE_TOOLS = TOOLS.map((tool) => ({
+  type: "function" as const,
+  name: tool.function.name,
+  description: tool.function.description,
+  parameters: tool.function.parameters,
+  strict: true,
+}))

@@ -11,7 +11,7 @@ import {
   SCREENSHOT_OMITTED_TEXT,
   SYSTEM_MESSAGE,
 } from "./queryConfig"
-import { TOOLS } from "./queryTools"
+import { RESPONSE_TOOLS, TOOLS } from "./queryTools"
 import {
   type AssistantMessage,
   type HistoryChangeHandler,
@@ -43,6 +43,7 @@ export class QueryClient implements QueryRunner {
   #messages: QueryMessage[] = []
   #pendingToolCalls: ToolCallRecord[] = []
   #runSteps = 0
+  #baseURL: string
 
   constructor({
     emit,
@@ -60,8 +61,10 @@ export class QueryClient implements QueryRunner {
       )
     }
 
+    this.#baseURL = LLM_BASE_URL || "https://api.openai.com/v1"
+
     this.openai = new OpenAI({
-      baseURL: LLM_BASE_URL || "https://api.openai.com/v1",
+      baseURL: this.#baseURL,
       apiKey: LLM_API_KEY || "not-set",
     })
   }
@@ -192,15 +195,21 @@ export class QueryClient implements QueryRunner {
   async cancel({ queryId }: { queryId?: string }) {
     if (!this.#state.isRunning) return false
     if (queryId && this.#state.queryId !== queryId) return false
-    this.#resetActiveQuery()
+    this.#resetActiveQuery({ preservePendingToolCalls: true })
     return true
   }
 
-  #resetActiveQuery() {
+  #resetActiveQuery({
+    preservePendingToolCalls = false,
+  }: {
+    preservePendingToolCalls?: boolean
+  } = {}) {
     this.#state.queryId = null
     this.#state.isRunning = false
     this.#state.pendingCallId = null
-    this.#pendingToolCalls = []
+    if (!preservePendingToolCalls) {
+      this.#pendingToolCalls = []
+    }
   }
 
   async #nextStep(queryId: string) {
@@ -289,6 +298,19 @@ export class QueryClient implements QueryRunner {
   }
 
   #inference(): Promise<QueryInferenceResult> {
+    if (this.#shouldUseResponsesApi()) {
+      return this.#responsesInference()
+    }
+
+    return this.#chatCompletionsInference().catch((error) => {
+      if (this.#shouldFallbackToResponses(error)) {
+        return this.#responsesInference()
+      }
+      throw error
+    })
+  }
+
+  #chatCompletionsInference(): Promise<QueryInferenceResult> {
     const systemMessage = SYSTEM_MESSAGE + getPlatformHint()
     const messages = [
       { role: "system", content: systemMessage },
@@ -314,6 +336,125 @@ export class QueryClient implements QueryRunner {
           promptTokens: response.usage?.prompt_tokens || 0,
         }
       })
+  }
+
+  #responsesInference(): Promise<QueryInferenceResult> {
+    const input = this.#toResponsesInput()
+
+    return this.openai.responses
+      .create({
+        model: LLM_MODEL,
+        input: input as never,
+        tools: RESPONSE_TOOLS as never,
+        tool_choice: "auto",
+        max_output_tokens: LLM_MAX_TOKENS,
+        temperature: LLM_TEMPERATURE,
+      })
+      .then((response) => {
+        const toolCalls = (response.output || [])
+          .filter((item) => item.type === "function_call")
+          .map((item) => ({
+            id: item.call_id || item.id || `${item.name}-${Date.now()}`,
+            type: "function" as const,
+            function: {
+              name: item.name,
+              arguments: item.arguments,
+            },
+          }))
+
+        return {
+          text: response.output_text || "",
+          toolCalls,
+          promptTokens: response.usage?.input_tokens || 0,
+        }
+      })
+  }
+
+  #toResponsesInput() {
+    const systemMessage = SYSTEM_MESSAGE + getPlatformHint()
+    const input: Array<Record<string, unknown>> = [
+      {
+        type: "message",
+        role: "system",
+        content: systemMessage,
+      },
+    ]
+
+    for (const message of this.#messages) {
+      if (message.role === "user") {
+        if (typeof message.content === "string") {
+          input.push({
+            type: "message",
+            role: "user",
+            content: message.content,
+          })
+          continue
+        }
+
+        input.push({
+          type: "message",
+          role: "user",
+          content: message.content.map((part) =>
+            part.type === "text"
+              ? { type: "input_text", text: part.text }
+              : {
+                  type: "input_image",
+                  image_url: part.image_url.url,
+                  detail: "auto",
+                }
+          ),
+        })
+        continue
+      }
+
+      if (message.role === "assistant") {
+        if (message.content) {
+          input.push({
+            type: "message",
+            role: "assistant",
+            content: message.content,
+          })
+        }
+
+        for (const toolCall of message.tool_calls || []) {
+          input.push({
+            type: "function_call",
+            call_id: toolCall.id,
+            name: toolCall.function.name,
+            arguments: toolCall.function.arguments,
+          })
+        }
+        continue
+      }
+
+      if (message.role === "tool") {
+        input.push({
+          type: "function_call_output",
+          call_id: message.tool_call_id,
+          output: message.content,
+        })
+      }
+    }
+
+    return input
+  }
+
+  #shouldUseResponsesApi() {
+    try {
+      const hostname = new URL(this.#baseURL).hostname.toLowerCase()
+      return hostname === "api.openai.com"
+    } catch {
+      return false
+    }
+  }
+
+  #shouldFallbackToResponses(error: unknown) {
+    if (!this.#shouldUseResponsesApi()) return false
+    const text = String(error || "").toLowerCase()
+    return (
+      text.includes("unsupported parameter") &&
+      (text.includes("max_tokens") || text.includes("max_completion_tokens"))
+    )
   }
 
   #parseArgs(argsString: unknown): ToolArgs {
