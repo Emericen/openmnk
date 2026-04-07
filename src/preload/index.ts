@@ -16,6 +16,8 @@ const openmnk: OpenmnkApi = {
     init: () => ipcRenderer.invoke("query:init"),
     start: (input) => ipcRenderer.invoke("query:start", input),
     cancel: () => ipcRenderer.invoke("query:cancel"),
+    respondToPendingAction: (input) =>
+      ipcRenderer.invoke("query:respondToPendingAction", input),
     onEvent: (listener) => subscribe("query:event", listener),
   },
   dictation: {

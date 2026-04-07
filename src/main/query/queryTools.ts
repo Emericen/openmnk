@@ -19,6 +19,10 @@ export const ToolArgsSchemas = {
   }),
   page_down: z.object({}),
   page_up: z.object({}),
+  run_command: z.object({
+    cmd: z.string(),
+    description: z.string(),
+  }),
 } as const
 
 export type ToolName = keyof typeof ToolArgsSchemas
@@ -27,6 +31,7 @@ export type TypeTextArgs = z.infer<typeof ToolArgsSchemas.type_text>
 export type KeyboardHotkeyArgs = z.infer<typeof ToolArgsSchemas.keyboard_hotkey>
 export type ScrollArgs = z.infer<typeof ToolArgsSchemas.scroll_down>
 export type DragArgs = z.infer<typeof ToolArgsSchemas.drag>
+export type RunCommandArgs = z.infer<typeof ToolArgsSchemas.run_command>
 
 export function parseToolArgs<T extends ToolName>(
   toolName: T,
@@ -378,6 +383,30 @@ export const TOOLS = [
       parameters: {
         type: "object",
         properties: {},
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "run_command",
+      description:
+        "Execute a shell command in a sandboxed Docker container. The container has python3, python-docx, pymupdf, openpyxl, LibreOffice headless, and standard Unix tools installed. The user's home directory is mounted at /home/user. Always provide a human-readable description of what the command does.",
+      parameters: {
+        type: "object",
+        properties: {
+          cmd: {
+            type: "string",
+            description: "The shell command to execute",
+          },
+          description: {
+            type: "string",
+            description:
+              "A short human-readable summary of what this command does, shown to the user for approval (e.g. 'Reading the sample agreement', 'Converting spreadsheet to PDF')",
+          },
+        },
+        required: ["cmd", "description"],
         additionalProperties: false,
       },
     },

@@ -13,6 +13,10 @@ export function createQueryEffects({
   let interruptionReason: string | null = null
   let loadingTipShownAt: number | null = null
 
+  function usesInlineRunCommandApproval(payload?: QueryProcessPayload) {
+    return payload?.toolName === "run_command" && payload?.query?.source === "chat"
+  }
+
   function showLoadingTip(text = "Working...") {
     ui.overlay.showLoading(text)
     loadingTipShownAt = Date.now()
@@ -52,20 +56,29 @@ export function createQueryEffects({
         break
       case QueryEvent.SERVICES_REQUESTED_APPROVAL:
         clearLoadingTipTracking()
+        if (payload?.queryPayload) ui.chat.send(payload.queryPayload)
+        if (usesInlineRunCommandApproval(payload)) break
         if (payload?.query?.source === "chat") ui.chat.hide()
         if (payload?.prompt) ui.overlay.showActionPrompt(payload.prompt)
-        if (payload?.queryPayload) ui.chat.send(payload.queryPayload)
         break
       case QueryEvent.USER_APPROVED_ACTION:
+        if (usesInlineRunCommandApproval(payload)) break
         showLoadingTip()
         break
       case QueryEvent.USER_REJECTED_ACTION:
+        if (usesInlineRunCommandApproval(payload)) break
         showLoadingTip("Thinking...")
         break
       case QueryEvent.TOOL_FINISHED:
+        if (usesInlineRunCommandApproval(payload)) break
         showLoadingTip()
         break
       case QueryEvent.TOOL_FAILED:
+        if (usesInlineRunCommandApproval(payload)) {
+          ui.chat.addSystemText(payload?.errorText || "Command failed.")
+          if (payload?.query?.source === "chat") ui.chat.show()
+          break
+        }
         ui.overlay.showFailure(payload?.errorText || "Action failed.")
         if (payload?.query?.source === "chat") ui.chat.show()
         break

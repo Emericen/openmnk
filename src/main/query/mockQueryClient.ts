@@ -27,12 +27,12 @@ export function createMockQueryClient({
     setTimeout(() => {
       if (!activeRun) return
       if (activeRun.queryId !== run.queryId) return
-      const done = stageHandlers[stage]?.({ run: activeRun, event })
+      const done = getStageHandlers(activeRun)[stage]?.({ run: activeRun, event })
       if (done) activeRun = null
     }, mockLatencyMs)
   }
 
-  const stageHandlers: Record<number, MockStageHandler> = {
+  const defaultStageHandlers: Record<number, MockStageHandler> = {
     0: ({ run }) => {
       emit({
         type: "message",
@@ -200,6 +200,73 @@ export function createMockQueryClient({
       emit({ type: "done", queryId: run.queryId, outcome: "completed" })
       return true
     },
+  }
+
+  const runCommandStageHandlers: Record<number, MockStageHandler> = {
+    0: ({ run }) => {
+      emit({
+        type: "message",
+        role: "system",
+        queryId: run.queryId,
+        text: "I can use the sandbox terminal for this. I'll show you the command before running it.",
+      })
+      emit({
+        type: "tool_call",
+        queryId: run.queryId,
+        callId: "sandbox-1",
+        toolName: "run_command",
+        args: {
+          cmd: "printf 'sandbox-ok\\n'",
+          description: "Print a sandbox marker",
+        },
+      })
+      run.pendingToolCalls = [{ callId: "sandbox-1" }]
+      run.stage = 1
+      return false
+    },
+    1: ({ run, event }) => {
+      run.pendingToolCalls.shift()
+
+      if (event?.status === "rejected") {
+        emit({
+          type: "message",
+          role: "assistant",
+          queryId: run.queryId,
+          text: "Understood. I cancelled the sandbox command.",
+        })
+        emit({ type: "done", queryId: run.queryId, outcome: "completed" })
+        return true
+      }
+
+      const stdout = String(event?.output?.stdout || "").trim()
+      const stderr = String(event?.output?.stderr || "").trim()
+      const exitCode =
+        typeof event?.output?.exit_code === "number"
+          ? event.output.exit_code
+          : undefined
+      const summaryParts = [stdout, stderr && `stderr: ${stderr}`].filter(
+        Boolean
+      )
+      const summary = summaryParts.join(" | ") || "no output"
+
+      emit({
+        type: "message",
+        role: "assistant",
+        queryId: run.queryId,
+        text:
+          exitCode && exitCode !== 0
+            ? `The sandbox command failed with exit code ${exitCode}.`
+            : `Sandbox command completed: ${summary}.`,
+      })
+      emit({ type: "done", queryId: run.queryId, outcome: "completed" })
+      return true
+    },
+  }
+
+  function getStageHandlers(run: MockRun) {
+    return String(run.query || "").trim().toLowerCase() === "/sandbox"
+      ? runCommandStageHandlers
+      : defaultStageHandlers
   }
 
   async function start({ queryId, threadId, query }: QueryClientStartInput) {

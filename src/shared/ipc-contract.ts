@@ -1,13 +1,28 @@
 export type Unsubscribe = () => void
 
+export type RunCommandApprovalState =
+  | "pending"
+  | "resolving"
+  | "approved"
+  | "rejected"
+
+export type RunCommandMessageMeta = {
+  callId: string
+  cmd: string
+  description: string
+  status: RunCommandApprovalState
+}
+
 export type ChatMessagePart =
-  | { type: "text"; text: string }
+  | { type: "text"; text: string; detail?: string }
   | { type: "image"; image: string }
 
 export type ChatMessage = {
   id: string
   role: "user" | "assistant" | "system"
   content: ChatMessagePart[]
+  queryId?: string
+  runCommand?: RunCommandMessageMeta
 }
 
 export type QueryEvent =
@@ -16,6 +31,7 @@ export type QueryEvent =
       role: "assistant" | "system"
       text: string
       queryId?: string
+      detail?: string
     }
   | {
       type: "tool_call"
@@ -36,6 +52,10 @@ export type QueryStartResult =
   | { success: false; error: string }
 
 export type BasicResult = { success: true } | { success: false; error: string }
+
+export type PendingActionDecisionResult =
+  | { success: true; approved: boolean }
+  | { success: false; error: string; approved?: boolean; cancelled?: boolean }
 
 export type DictationCommand = { type: "start" } | { type: "stop" }
 
@@ -91,6 +111,9 @@ export type OpenmnkApi = {
       threadId?: string | null
     }) => Promise<QueryStartResult>
     cancel: () => Promise<BasicResult>
+    respondToPendingAction: (input: {
+      approved: boolean
+    }) => Promise<PendingActionDecisionResult>
     onEvent: (listener: (event: QueryEvent) => void) => Unsubscribe
   }
   dictation: {

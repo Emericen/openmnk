@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   SkillsListResult,
   QueryEvent,
+  RunCommandMessageMeta,
 } from "../../shared/ipc-contract"
 import {
   getLatestWindow,
@@ -48,6 +49,7 @@ type ChatRuntimeStoreState = {
   dispatchUIEvent: (event: UIEventValue) => boolean
   initQueryBridge: () => Promise<void>
   loadOlderMessages: () => void
+  respondToRunCommand: (messageId: string, approved: boolean) => Promise<void>
   sendMessage: (
     text: string,
     _options?: Record<string, unknown>
@@ -116,25 +118,123 @@ function appendTextMessage(
   {
     role = "assistant",
     text = "",
+    detail,
+    queryId,
+    runCommand,
   }: {
     role?: Extract<QueryEvent, { type: "message" }>["role"]
     text?: string
+    detail?: string
+    queryId?: string
+    runCommand?: RunCommandMessageMeta
   }
 ): ChatMessage[] {
   const content = String(text || "").trim()
   if (!content) return messages
+
+  const part: ChatMessage["content"][number] = { type: "text", text: content }
+  if (detail) {
+    ;(part as { type: "text"; text: string; detail?: string }).detail = detail
+  }
 
   return [
     ...messages,
     {
       id: nextId(),
       role: role === "system" ? "system" : "assistant",
-      content: [{ type: "text", text: content }],
+      content: [part],
+      queryId,
+      runCommand,
     },
   ]
 }
 
+function appendDetailToLastSystem(
+  messages: ChatMessage[],
+  detail: string,
+  queryId?: string
+): ChatMessage[] {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg?.role !== "system") continue
+    if (queryId && msg?.queryId !== queryId) continue
+    const parts = Array.isArray(msg.content) ? msg.content : []
+    const textPart = parts.find((p) => p.type === "text") as
+      | { type: "text"; text: string; detail?: string }
+      | undefined
+    if (!textPart) continue
+
+    const existingDetail = textPart.detail || ""
+    const newDetail = existingDetail
+      ? `${existingDetail}\n${detail}`
+      : detail
+    const updatedPart = { ...textPart, detail: newDetail }
+    const updatedContent = parts.map((p) =>
+      p === textPart ? updatedPart : p
+    )
+    const updated = [...messages]
+    updated[i] = { ...msg, content: updatedContent as ChatMessage["content"] }
+    return updated
+  }
+  return messages
+}
+
+function updateRunCommandMessage(
+  messages: ChatMessage[],
+  messageId: string,
+  updater: (
+    runCommand: RunCommandMessageMeta
+  ) => RunCommandMessageMeta
+): ChatMessage[] {
+  return messages.map((message) => {
+    if (message.id !== messageId || !message.runCommand) return message
+    return {
+      ...message,
+      runCommand: updater(message.runCommand),
+    }
+  })
+}
+
+function attachRunCommandToLastSystemMessage(
+  messages: ChatMessage[],
+  queryId: string,
+  runCommand: RunCommandMessageMeta
+): ChatMessage[] {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (message?.role !== "system") continue
+    if (message?.queryId !== queryId) continue
+    if (message.runCommand) return messages
+
+    const updated = [...messages]
+    updated[i] = {
+      ...message,
+      runCommand,
+    }
+    return updated
+  }
+  return messages
+}
+
+function markRunCommandsForQuery(
+  messages: ChatMessage[],
+  queryId: string,
+  status: RunCommandMessageMeta["status"],
+  allowedStatuses: RunCommandMessageMeta["status"][] = ["pending", "resolving"]
+): ChatMessage[] {
+  return messages.map((message) => {
+    if (message.queryId !== queryId || !message.runCommand) return message
+    if (!allowedStatuses.includes(message.runCommand.status)) return message
+    return {
+      ...message,
+      runCommand: { ...message.runCommand, status },
+    }
+  })
+}
+
 export const useChatRuntimeStore = create<ChatRuntimeStoreState>((set, get) => {
+  const pendingRunCommands = new Map<string, RunCommandMessageMeta>()
+
   function updateAllMessages(
     updater: (messages: ChatMessage[]) => ChatMessage[],
     { keepWindow = false }: { keepWindow?: boolean } = {}
@@ -175,15 +275,69 @@ export const useChatRuntimeStore = create<ChatRuntimeStoreState>((set, get) => {
     dispatchUIEvent: transitionUI,
 
     initQueryBridge: async () => {
+      pendingRunCommands.clear()
+
       if (!querySubscribed) {
         window.openmnk.query.onEvent((event) => {
           if (!event?.type) return
 
+          if (event.type === "tool_call") {
+            if (event.toolName === "run_command") {
+              const runCommand: RunCommandMessageMeta = {
+                callId: event.callId,
+                cmd: String(event.args?.cmd || ""),
+                description: String(event.args?.description || ""),
+                status: "pending",
+              }
+              pendingRunCommands.set(event.queryId, runCommand)
+              updateAllMessages((messages) =>
+                attachRunCommandToLastSystemMessage(
+                  messages,
+                  event.queryId,
+                  runCommand
+                )
+              )
+            }
+            return
+          }
+
           if (event.type === "message") {
             const role = event.role === "system" ? "system" : "assistant"
-            updateAllMessages((messages) =>
-              appendTextMessage(messages, { role, text: event.text || "" })
-            )
+            const text = event.text || ""
+            const detail = event.detail
+            const pendingRunCommand =
+              role === "system" && event.queryId
+                ? pendingRunCommands.get(event.queryId)
+                : undefined
+
+            if (!text.trim() && detail && role === "system") {
+              updateAllMessages((messages) => {
+                const next = appendDetailToLastSystem(
+                  messages,
+                  detail,
+                  event.queryId
+                )
+                return event.queryId
+                  ? markRunCommandsForQuery(next, event.queryId, "approved")
+                  : next
+              })
+            } else {
+              updateAllMessages((messages) => {
+                const next = appendTextMessage(messages, {
+                  role,
+                  text,
+                  detail,
+                  queryId: event.queryId,
+                  runCommand: pendingRunCommand
+                    ? pendingRunCommand
+                    : undefined,
+                })
+                return next
+              })
+            }
+            if (pendingRunCommand && event.queryId) {
+              pendingRunCommands.delete(event.queryId)
+            }
             transitionUI(UIEvent.MESSAGE_RECEIVED)
             return
           }
@@ -194,6 +348,9 @@ export const useChatRuntimeStore = create<ChatRuntimeStoreState>((set, get) => {
           }
 
           if (event.type === "done") {
+            updateAllMessages((messages) =>
+              markRunCommandsForQuery(messages, event.queryId, "approved")
+            )
             transitionUI(UIEvent.REQUEST_DONE)
           }
         })
@@ -226,6 +383,62 @@ export const useChatRuntimeStore = create<ChatRuntimeStoreState>((set, get) => {
           hasOlderMessages: windowState.hasOlderMessages,
         }
       })
+    },
+
+    respondToRunCommand: async (messageId, approved) => {
+      updateAllMessages((messages) =>
+        updateRunCommandMessage(messages, messageId, (runCommand) => ({
+          ...runCommand,
+          status: "resolving",
+        }))
+      )
+
+      try {
+        const result = await window.openmnk.query.respondToPendingAction({
+          approved,
+        })
+
+        if (!result.success) {
+          updateAllMessages((messages) =>
+            updateRunCommandMessage(messages, messageId, (runCommand) => ({
+              ...runCommand,
+              status: "pending",
+            }))
+          )
+          updateAllMessages((messages) =>
+            appendTextMessage(messages, {
+              role: "system",
+              text: `Error: ${result.error || "Failed to resolve action"}`,
+            })
+          )
+          return
+        }
+
+        updateAllMessages((messages) =>
+          updateRunCommandMessage(messages, messageId, (runCommand) => ({
+            ...runCommand,
+            status: approved ? "approved" : "rejected",
+          }))
+        )
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : String(error || "Unknown error")
+
+        updateAllMessages((messages) =>
+          updateRunCommandMessage(messages, messageId, (runCommand) => ({
+            ...runCommand,
+            status: "pending",
+          }))
+        )
+        updateAllMessages((messages) =>
+          appendTextMessage(messages, {
+            role: "system",
+            text: `Error: ${message}`,
+          })
+        )
+      }
     },
 
     sendMessage: async (text, _options = {}) => {

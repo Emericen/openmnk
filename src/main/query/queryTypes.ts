@@ -6,6 +6,7 @@ export type QueryEmitPayload =
       role: "assistant" | "system"
       queryId: string
       text: string
+      detail?: string
     }
   | {
       type: "tool_call"
@@ -137,6 +138,7 @@ export type QueryProcessPayload = {
   query?: QueryProcessActiveQuery | null
   prompt?: string
   queryPayload?: ForwardableQueryEvent
+  toolName?: string
   outcome?: "completed" | "failed"
   message?: string
   reason?: string

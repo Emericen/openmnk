@@ -2,6 +2,8 @@ type QueryUiArgs = {
   text?: string
   keys?: unknown[]
   amount?: number
+  description?: string
+  cmd?: string
 }
 
 function formatTextPreview(value: unknown, maxLength = 80): string {
@@ -54,6 +56,10 @@ export function getToolTransparencyText(
       return "⌨️ pressing page down..."
     case "page_up":
       return "⌨️ pressing page up..."
+    case "run_command": {
+      const desc = args.description || args.cmd
+      return `🖥️ ${formatTextPreview(desc)}`
+    }
     default:
       return `⚙️ running ${toolName}...`
   }

@@ -155,6 +155,27 @@ app.whenReady().then(async () => {
   )
 
   ipcMain.handle("query:cancel", async () => queryProcess.cancel())
+  ipcMain.handle(
+    "query:respondToPendingAction",
+    async (_event, payload: { approved?: boolean } = {}) => {
+      const result = await queryProcess.resolvePendingActionDecision(
+        Boolean(payload.approved)
+      )
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || "Failed to resolve pending action",
+          approved: Boolean(result.approved),
+          cancelled: Boolean(result.cancelled),
+        }
+      }
+
+      return {
+        success: true,
+        approved: Boolean(result.approved),
+      }
+    }
+  )
 
   ipcMain.handle("dictation:transcribe", async (_event, payload = {}) =>
     transcribeDictation(payload)

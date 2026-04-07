@@ -11,6 +11,9 @@ type ExecuteResult =
   | { done: true }
   | { error: string }
   | { image: string; width: number; height: number }
+  | { stdout: string; stderr: string; exit_code: number }
+
+const SANDBOX_URL = process.env.SANDBOX_URL || "http://localhost:8082"
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -51,6 +54,8 @@ export function createController() {
         )
         return {}
       }
+      case "run_command":
+        return {}
       default:
         return {}
     }
@@ -86,6 +91,10 @@ export function createController() {
         return "Press Page Down?"
       case "page_up":
         return "Press Page Up?"
+      case "run_command": {
+        const parsed = parseToolArgs("run_command", args)
+        return `${parsed.description}\n$ ${parsed.cmd}`
+      }
       default:
         return `Execute tool ${toolName}?`
     }
@@ -166,6 +175,24 @@ export function createController() {
       case "page_up":
         await keyboard.pageUp()
         break
+      case "run_command": {
+        const parsed = parseToolArgs("run_command", args)
+        const res = await fetch(`${SANDBOX_URL}/exec`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cmd: parsed.cmd }),
+        })
+        const result = (await res.json()) as {
+          stdout: string
+          stderr: string
+          exit_code: number
+        }
+        return {
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exit_code: result.exit_code,
+        }
+      }
       default:
         return { error: `Unknown tool: ${toolName}` }
     }

@@ -148,7 +148,10 @@ export function createQueryProcess({
     }
 
     if (!approved) {
-      await dispatch(QueryEvent.USER_REJECTED_ACTION)
+      await dispatch(QueryEvent.USER_REJECTED_ACTION, {
+        query: pending.query,
+        toolName: pending.toolName,
+      })
       await runner.submitToolResult({
         queryId: pending.query.queryId,
         status: "rejected",
@@ -160,14 +163,49 @@ export function createQueryProcess({
       return { success: true, approved: false }
     }
 
-    await dispatch(QueryEvent.USER_APPROVED_ACTION)
+    await dispatch(QueryEvent.USER_APPROVED_ACTION, {
+      query: pending.query,
+      toolName: pending.toolName,
+    })
 
     try {
       const result = await executePendingAction(pending)
       if (!isQueryCurrent(pending.query.queryId)) {
         return { success: false, cancelled: true }
       }
-      await dispatch(QueryEvent.TOOL_FINISHED)
+
+      if (
+        pending.toolName === "run_command" &&
+        result &&
+        typeof result === "object"
+      ) {
+        const r = result as {
+          stdout?: string
+          stderr?: string
+          exit_code?: number
+        }
+        const outputParts: string[] = []
+        if (r.stdout) outputParts.push(r.stdout)
+        if (r.stderr) outputParts.push(`stderr: ${r.stderr}`)
+        if (r.exit_code !== undefined && r.exit_code !== 0) {
+          outputParts.push(`exit code: ${r.exit_code}`)
+        }
+        const outputText = outputParts.join("\n").trim()
+        if (outputText) {
+          ui.chat.addSystemText("", {
+            type: "message",
+            role: "system",
+            queryId: pending.query.queryId,
+            text: "",
+            detail: outputText,
+          })
+        }
+      }
+
+      await dispatch(QueryEvent.TOOL_FINISHED, {
+        query: pending.query,
+        toolName: pending.toolName,
+      })
       await runner.submitToolResult({
         queryId: pending.query.queryId,
         status: "ok",
@@ -178,6 +216,7 @@ export function createQueryProcess({
       const errorText = error instanceof Error ? error.message : "Unknown error"
       await dispatch(QueryEvent.TOOL_FAILED, {
         query: pending.query,
+        toolName: pending.toolName,
         errorText,
       })
       await runner.submitToolResult({
@@ -214,7 +253,17 @@ export function createQueryProcess({
         pending.args
       )
       if (transparencyText) {
-        ui.chat.addSystemText(transparencyText, { queryId: active.queryId })
+        const detail =
+          pending.toolName === "run_command" && pending.args.cmd
+            ? `$ ${String(pending.args.cmd)}`
+            : undefined
+        ui.chat.addSystemText(transparencyText, {
+          type: "message",
+          role: "system",
+          queryId: active.queryId,
+          text: transparencyText,
+          detail,
+        })
       }
 
       if (!controller.requiresApproval(payload.toolName)) {
@@ -256,6 +305,7 @@ export function createQueryProcess({
         query: active,
         prompt,
         queryPayload: payload,
+        toolName: pending.toolName,
       })
       return
     }
