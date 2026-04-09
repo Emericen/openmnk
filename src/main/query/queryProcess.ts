@@ -83,7 +83,7 @@ export function createQueryProcess({
     const emit: QueryEmit = (payload) => {
       void handleQueryEvent(payload)
     }
-    queryClient = new QueryClient({ emit })
+    queryClient = new QueryClient({ emit, controller })
     mockQueryClient = createMockQueryClient({ emit })
   }
 

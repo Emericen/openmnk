@@ -6,6 +6,7 @@ export type QueryEmitPayload =
       role: "assistant" | "system"
       queryId: string
       text: string
+      detail?: string
     }
   | {
       type: "tool_call"
@@ -21,6 +22,7 @@ export type QueryEmitPayload =
       role: "assistant" | "system"
       queryId?: string
       text?: string
+      detail?: string
     }
 
 export type QueryEmit = (payload: QueryEmitPayload) => void
@@ -37,6 +39,118 @@ export type HistoryChangeHandler = (payload: {
 
 export type ToolArgs = Record<string, unknown>
 
+export type ToolResultStatus = "ok" | "rejected" | "error"
+
+export type QueryClientStartInput = {
+  queryId: string
+  threadId?: string | null
+  query: string
+}
+
+export type QueryClientToolResultInput = {
+  queryId: string
+  status: ToolResultStatus
+  output?: Record<string, unknown> | null
+}
+
+export type QueryRunState = {
+  queryId: string | null
+  isRunning: boolean
+  pendingCallId: string | null
+  history: HistoryEntry[]
+}
+
+export type QueryRunnerKind = "real" | "mock"
+
+export type QueryProcessActiveQuery = {
+  queryId: string
+  threadId: string
+  source: string
+  runnerKind: QueryRunnerKind
+}
+
+export type PendingAction = {
+  query: QueryProcessActiveQuery
+  callId: string
+  toolName: string
+  args: ToolArgs
+}
+
+export type QueryProcessPayload = {
+  query?: QueryProcessActiveQuery | null
+  prompt?: string
+  queryPayload?: ForwardableQueryEvent
+  outcome?: "completed" | "failed"
+  message?: string
+  reason?: string
+  notifyCancelledText?: boolean
+  queryId?: string
+  errorText?: string
+  toolName?: string
+}
+
+export type QueryProcessController = {
+  execute: (
+    toolName: string,
+    args: ToolArgs
+  ) => Promise<Record<string, unknown>>
+  getConfirmationPrompt: (
+    toolName: string,
+    args: ToolArgs
+  ) => Promise<string> | string
+  preview: (toolName: string, args: ToolArgs) => Promise<unknown>
+  requiresApproval: (toolName: string) => boolean
+}
+
+export type QueryProcessUi = {
+  overlay: {
+    showLoading: (text?: string) => void
+    showActionPrompt: (promptText: string) => void
+    showFailure: (text: string) => void
+    hide: () => void
+    hideAfter: (ms?: number) => void
+  }
+  chat: {
+    hide: () => void
+    show: () => void
+    send: (payload: ForwardableQueryEvent) => void
+    addSystemText: (
+      text: string,
+      extra?: Partial<ForwardableQueryEvent> & { detail?: string }
+    ) => void
+    addAssistantText: (
+      text: string,
+      extra?: Partial<ForwardableQueryEvent> & { detail?: string }
+    ) => void
+  }
+}
+
+export type QueryProcessState = {
+  queryState: QueryStateValue
+  activeQuery: QueryProcessActiveQuery | null
+  pendingAction: PendingAction | null
+  interruptionReason: string | null
+  loadingTipShownAt: number | null
+}
+
+export type RunEffectsInput = {
+  event: QueryEventValue
+  payload?: QueryProcessPayload
+}
+
+export type QueryRunner = {
+  start: (input: QueryClientStartInput) => Promise<boolean>
+  submitToolResult: (
+    input: QueryClientToolResultInput
+  ) => Promise<boolean> | boolean
+  isRunning: () => boolean
+  cancel: (input: { queryId?: string }) => Promise<boolean> | boolean
+  clear: () => boolean
+  loadHistory: (_history: unknown) => boolean
+  getHistory: () => HistoryEntry[]
+}
+
+// Legacy types kept for mock client compatibility
 export type ToolCallRecord = {
   id: string
   type: "function"
@@ -78,27 +192,6 @@ export type QueryInferenceResult = {
   promptTokens: number
 }
 
-export type ToolResultStatus = "ok" | "rejected" | "error"
-
-export type QueryClientStartInput = {
-  queryId: string
-  threadId?: string | null
-  query: string
-}
-
-export type QueryClientToolResultInput = {
-  queryId: string
-  status: ToolResultStatus
-  output?: Record<string, unknown> | null
-}
-
-export type QueryRunState = {
-  queryId: string | null
-  isRunning: boolean
-  pendingCallId: string | null
-  history: HistoryEntry[]
-}
-
 export type MockToolResultEvent = {
   status: ToolResultStatus
   output?: Record<string, unknown> | null
@@ -116,92 +209,3 @@ export type MockStageHandler = (input: {
   run: MockRun
   event?: MockToolResultEvent | null
 }) => boolean
-
-export type QueryRunnerKind = "real" | "mock"
-
-export type QueryProcessActiveQuery = {
-  queryId: string
-  threadId: string
-  source: string
-  runnerKind: QueryRunnerKind
-}
-
-export type PendingAction = {
-  query: QueryProcessActiveQuery
-  callId: string
-  toolName: string
-  args: ToolArgs
-}
-
-export type QueryProcessPayload = {
-  query?: QueryProcessActiveQuery | null
-  prompt?: string
-  queryPayload?: ForwardableQueryEvent
-  outcome?: "completed" | "failed"
-  message?: string
-  reason?: string
-  notifyCancelledText?: boolean
-  queryId?: string
-  errorText?: string
-}
-
-export type QueryProcessController = {
-  execute: (
-    toolName: string,
-    args: ToolArgs
-  ) => Promise<Record<string, unknown>>
-  getConfirmationPrompt: (
-    toolName: string,
-    args: ToolArgs
-  ) => Promise<string> | string
-  preview: (toolName: string, args: ToolArgs) => Promise<unknown>
-  requiresApproval: (toolName: string) => boolean
-}
-
-export type QueryProcessUi = {
-  overlay: {
-    showLoading: (text?: string) => void
-    showActionPrompt: (promptText: string) => void
-    showFailure: (text: string) => void
-    hide: () => void
-    hideAfter: (ms?: number) => void
-  }
-  chat: {
-    hide: () => void
-    show: () => void
-    send: (payload: ForwardableQueryEvent) => void
-    addSystemText: (
-      text: string,
-      extra?: Partial<ForwardableQueryEvent>
-    ) => void
-    addAssistantText: (
-      text: string,
-      extra?: Partial<ForwardableQueryEvent>
-    ) => void
-  }
-}
-
-export type QueryProcessState = {
-  queryState: QueryStateValue
-  activeQuery: QueryProcessActiveQuery | null
-  pendingAction: PendingAction | null
-  interruptionReason: string | null
-  loadingTipShownAt: number | null
-}
-
-export type RunEffectsInput = {
-  event: QueryEventValue
-  payload?: QueryProcessPayload
-}
-
-export type QueryRunner = {
-  start: (input: QueryClientStartInput) => Promise<boolean>
-  submitToolResult: (
-    input: QueryClientToolResultInput
-  ) => Promise<boolean> | boolean
-  isRunning: () => boolean
-  cancel: (input: { queryId?: string }) => Promise<boolean> | boolean
-  clear: () => boolean
-  loadHistory: (_history: unknown) => boolean
-  getHistory: () => HistoryEntry[]
-}
