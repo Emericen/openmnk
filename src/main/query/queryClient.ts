@@ -1,37 +1,39 @@
-import OpenAI from "openai"
+import { generateText, stepCountIs, type ModelMessage, type ToolApprovalResponse } from "ai"
 import {
+  createLLMModel,
   getPlatformHint,
-  LLM_API_KEY,
-  LLM_BASE_URL,
   LLM_MAX_TOKENS,
-  LLM_MODEL,
   LLM_TEMPERATURE,
-  MAX_SCREENSHOT_MESSAGES,
   MAX_STEPS,
+  MAX_SCREENSHOT_MESSAGES,
   SCREENSHOT_OMITTED_TEXT,
   SYSTEM_MESSAGE,
 } from "./queryConfig"
-import { TOOLS } from "./queryTools"
+import { createTools } from "./queryTools"
 import {
-  type AssistantMessage,
   type HistoryChangeHandler,
-  type MessageContentPart,
   type QueryClientStartInput,
   type QueryClientToolResultInput,
   type QueryEmit,
-  type QueryInferenceResult,
-  type QueryMessage,
   type QueryRunState,
   type QueryRunner,
   type ToolArgs,
-  type ToolCallRecord,
 } from "./queryTypes"
 import { clone, formatError } from "./queryUtils"
+
+type ToolExecutor = {
+  execute: (
+    toolName: string,
+    args: Record<string, unknown>
+  ) => Promise<Record<string, unknown>>
+}
 
 export class QueryClient implements QueryRunner {
   emit: QueryEmit
   onHistoryChange?: HistoryChangeHandler
-  openai: OpenAI
+
+  #controller: ToolExecutor
+  #abortController: AbortController | null = null
 
   #state: QueryRunState = {
     queryId: null,
@@ -40,30 +42,21 @@ export class QueryClient implements QueryRunner {
     history: [],
   }
 
-  #messages: QueryMessage[] = []
-  #pendingToolCalls: ToolCallRecord[] = []
-  #runSteps = 0
+  #messages: ModelMessage[] = []
+  #approvalResolver: ((input: QueryClientToolResultInput) => void) | null = null
 
   constructor({
     emit,
     onHistoryChange,
+    controller,
   }: {
     emit: QueryEmit
     onHistoryChange?: HistoryChangeHandler
+    controller: ToolExecutor
   }) {
     this.emit = emit
     this.onHistoryChange = onHistoryChange
-
-    if (!LLM_BASE_URL || !LLM_API_KEY) {
-      console.warn(
-        "[query] LLM_BASE_URL or LLM_API_KEY not set. Queries will fail."
-      )
-    }
-
-    this.openai = new OpenAI({
-      baseURL: LLM_BASE_URL || "https://api.openai.com/v1",
-      apiKey: LLM_API_KEY || "not-set",
-    })
+    this.#controller = controller
   }
 
   isRunning() {
@@ -82,8 +75,6 @@ export class QueryClient implements QueryRunner {
     if (this.#state.isRunning) return false
     this.#state.history = []
     this.#messages = []
-    this.#pendingToolCalls = []
-    this.#runSteps = 0
     this.#notifyHistory()
     return true
   }
@@ -95,21 +86,7 @@ export class QueryClient implements QueryRunner {
     this.#state.queryId = queryId
     this.#state.isRunning = true
     this.#state.pendingCallId = null
-    this.#runSteps = 0
-
-    if (this.#pendingToolCalls.length > 0) {
-      for (const orphaned of this.#pendingToolCalls) {
-        this.#messages.push({
-          role: "tool",
-          tool_call_id: orphaned.id,
-          content: JSON.stringify({
-            status: "rejected",
-            reason: "User interrupted. Ask what they would like to do instead.",
-          }),
-        })
-      }
-      this.#pendingToolCalls = []
-    }
+    this.#abortController = new AbortController()
 
     const text = String(query).trim()
     this.#state.history.push({ role: "user", content: text })
@@ -117,7 +94,7 @@ export class QueryClient implements QueryRunner {
     this.#messages.push({ role: "user", content: text })
 
     try {
-      await this.#nextStep(queryId)
+      await this.#runLoop(queryId)
       return true
     } catch (error) {
       if (!this.#state.isRunning || this.#state.queryId !== queryId) return true
@@ -132,252 +109,191 @@ export class QueryClient implements QueryRunner {
     }
   }
 
-  async submitToolResult({
-    queryId,
-    status,
-    output,
-  }: QueryClientToolResultInput) {
-    if (!this.#state.isRunning || this.#state.queryId !== queryId) return false
-
-    const normalizedStatus =
-      status === "ok" || status === "rejected" || status === "error"
-        ? status
-        : "error"
-
-    const currentCall = this.#pendingToolCalls.shift()
-    if (!currentCall) return false
-
-    const resultOutput: Record<string, unknown> = { ...(output || {}) }
-    const screenshotImage = resultOutput.image
-    delete resultOutput.image
-
-    this.#messages.push({
-      role: "tool",
-      tool_call_id: currentCall.id,
-      content: JSON.stringify({ status: normalizedStatus, ...resultOutput }),
-    })
-
-    if (typeof screenshotImage === "string" && screenshotImage) {
-      this.#messages.push({
-        role: "user",
-        content: [
-          { type: "text", text: "Here is the screenshot result." },
-          {
-            type: "image_url",
-            image_url: { url: `data:image/jpeg;base64,${screenshotImage}` },
-          },
-        ],
-      })
-    }
-
-    this.#pruneScreenshots()
-    this.#state.pendingCallId = null
-
-    try {
-      await this.#nextStep(queryId)
-      return true
-    } catch (error) {
-      if (!this.#state.isRunning || this.#state.queryId !== queryId) return true
-      this.emit({
-        type: "error",
-        queryId,
-        code: "llm_error",
-        message: formatError(error),
-      })
-      this.#finish(queryId, "failed")
+  async submitToolResult(input: QueryClientToolResultInput) {
+    if (!this.#state.isRunning || this.#state.queryId !== input.queryId)
       return false
+    if (this.#approvalResolver) {
+      this.#approvalResolver(input)
+      this.#approvalResolver = null
+      return true
     }
+    return false
   }
 
   async cancel({ queryId }: { queryId?: string }) {
     if (!this.#state.isRunning) return false
     if (queryId && this.#state.queryId !== queryId) return false
-    this.#resetActiveQuery({ preservePendingToolCalls: true })
+    this.#abortController?.abort()
+    this.#approvalResolver = null
+    this.#resetActiveQuery()
     return true
   }
 
-  #resetActiveQuery({
-    preservePendingToolCalls = false,
-  }: {
-    preservePendingToolCalls?: boolean
-  } = {}) {
-    this.#state.queryId = null
-    this.#state.isRunning = false
-    this.#state.pendingCallId = null
-    if (!preservePendingToolCalls) {
-      this.#pendingToolCalls = []
-    }
-  }
+  async #runLoop(queryId: string) {
+    const model = createLLMModel()
+    const tools = createTools(this.#controller)
+    const systemMessage = SYSTEM_MESSAGE + getPlatformHint()
 
-  async #nextStep(queryId: string) {
-    if (!this.#state.isRunning || this.#state.queryId !== queryId) return
+    while (this.#state.isRunning && this.#state.queryId === queryId) {
+      // Prune old screenshots before each call
+      this.#pruneScreenshots()
 
-    if (this.#pendingToolCalls.length > 0) {
-      const next = this.#pendingToolCalls[0]
-      if (!next) return
-      this.#state.pendingCallId = next.id
-      this.emit({
-        type: "tool_call",
-        queryId,
-        callId: next.id,
-        toolName: next.function.name,
-        args: this.#parseArgs(next.function.arguments),
+      // Log context size
+      console.log(
+        `[queryClient] generating, ${this.#messages.length} messages`
+      )
+
+      const result = await generateText({
+        model,
+        system: systemMessage,
+        messages: this.#messages,
+        tools,
+        stopWhen: stepCountIs(MAX_STEPS),
+        temperature: LLM_TEMPERATURE,
+        maxOutputTokens: LLM_MAX_TOKENS,
+        abortSignal: this.#abortController?.signal,
+        providerOptions: {
+          anthropic: { cacheControl: { type: "ephemeral" } },
+        },
+        onStepFinish: ({ text, toolCalls }) => {
+          // Emit transparency for each tool call as it happens
+          for (const tc of toolCalls) {
+            const toolName = tc.toolName
+            const input = ("input" in tc ? tc.input : {}) as Record<string, unknown>
+
+            // Emit tool_call event for UI transparency (but NOT for approval tools,
+            // those will be handled via the approval request flow below)
+            if (
+              toolName === "screenshot" ||
+              toolName === "run_command" ||
+              toolName === "view_images"
+            ) {
+              this.emit({
+                type: "tool_call",
+                queryId,
+                callId: tc.toolCallId,
+                toolName,
+                args: input,
+              })
+            }
+          }
+
+          // Emit intermediate text
+          if (text && toolCalls.length > 0) {
+            this.emit({
+              type: "message",
+              role: "system",
+              queryId,
+              text,
+            })
+          }
+        },
       })
-      return
-    }
 
-    if (this.#runSteps >= MAX_STEPS) {
-      this.#runSteps = 0
-      this.#state.history.push({
-        role: "assistant",
-        content: "Reached max steps. Stopping.",
-      })
-      this.#notifyHistory()
-      this.emit({
-        type: "message",
-        role: "assistant",
-        queryId,
-        text: "Reached max steps. Stopping.",
-      })
-      this.#finish(queryId, "completed")
-      return
-    }
+      // Check if cancelled during generation
+      if (!this.#state.isRunning || this.#state.queryId !== queryId) return
 
-    const result = await this.#inference()
-    this.#runSteps += 1
+      // Check for approval requests
+      const approvalRequest = result.content.find(
+        (p) => p.type === "tool-approval-request"
+      )
 
-    if (!this.#state.isRunning || this.#state.queryId !== queryId) return
+      if (approvalRequest && approvalRequest.type === "tool-approval-request") {
+        // This is a mouse/keyboard tool that needs user approval
+        const toolCall = approvalRequest.toolCall
+        this.#state.pendingCallId = approvalRequest.approvalId
 
-    const text = String(result.text || "").trim()
-    const toolCalls = result.toolCalls || []
+        // Emit tool_call for the process layer to show approval overlay
+        this.emit({
+          type: "tool_call",
+          queryId,
+          callId: approvalRequest.approvalId,
+          toolName: toolCall.toolName,
+          args: (toolCall.input ?? {}) as Record<string, unknown>,
+        })
 
-    const assistantMessage: AssistantMessage = {
-      role: "assistant",
-      content: text,
-    }
-    if (toolCalls.length > 0) {
-      assistantMessage.tool_calls = toolCalls.map((tc) => ({
-        id: tc.id,
-        type: "function",
-        function: { name: tc.function.name, arguments: tc.function.arguments },
-      }))
-    }
-    this.#messages.push(assistantMessage)
+        // Wait for user decision
+        const decision = await new Promise<QueryClientToolResultInput>(
+          (resolve) => {
+            this.#approvalResolver = resolve
+          }
+        )
 
-    if (toolCalls.length > 0) {
-      if (text) {
-        this.#state.history.push({ role: "assistant", content: text })
-        this.#notifyHistory()
-        this.emit({ type: "message", role: "system", queryId, text })
+        if (!this.#state.isRunning || this.#state.queryId !== queryId) return
+
+        const approved = decision.status === "ok"
+
+        // Push the conversation forward with approval response
+        this.#messages.push(...(result.response.messages as ModelMessage[]))
+
+        const approvalResponse: ToolApprovalResponse = {
+          type: "tool-approval-response",
+          approvalId: approvalRequest.approvalId,
+          approved,
+          reason: approved
+            ? undefined
+            : "User declined. Ask what they would like to do instead.",
+        }
+        this.#messages.push({
+          role: "tool",
+          content: [approvalResponse],
+        } as ModelMessage)
+
+        this.#state.pendingCallId = null
+        continue // Loop back to generateText
       }
 
-      this.#pendingToolCalls = toolCalls
-      const first = this.#pendingToolCalls[0]
-      if (!first) return
-      this.#state.pendingCallId = first.id
-      this.emit({
-        type: "tool_call",
-        queryId,
-        callId: first.id,
-        toolName: first.function.name,
-        args: this.#parseArgs(first.function.arguments),
-      })
+      // No approval needed — generation complete
+      const finalText = String(result.text || "").trim()
+      if (finalText) {
+        this.#state.history.push({ role: "assistant", content: finalText })
+        this.#notifyHistory()
+        this.emit({
+          type: "message",
+          role: "assistant",
+          queryId,
+          text: finalText,
+        })
+      }
+
+      // Save full response messages for context continuity
+      this.#messages.push(...(result.response.messages as ModelMessage[]))
+
+      if (result.usage) {
+        console.log(
+          `[queryClient] tokens — input: ${result.usage.inputTokens}, output: ${result.usage.outputTokens}`
+        )
+      }
+
+      this.#finish(queryId, "completed")
       return
-    }
-
-    this.#runSteps = 0
-    if (text) {
-      this.#state.history.push({ role: "assistant", content: text })
-      this.#notifyHistory()
-      this.emit({ type: "message", role: "assistant", queryId, text })
-    }
-    this.#finish(queryId, "completed")
-  }
-
-  #inference(): Promise<QueryInferenceResult> {
-    const systemMessage = SYSTEM_MESSAGE + getPlatformHint()
-    const messages = [
-      { role: "system", content: systemMessage },
-      ...this.#messages,
-    ]
-    const request: Record<string, unknown> = {
-      model: LLM_MODEL,
-      messages: messages as never,
-      tools: TOOLS as never,
-      tool_choice: "auto",
-      temperature: LLM_TEMPERATURE,
-      max_completion_tokens: LLM_MAX_TOKENS,
-    }
-
-    return this.openai.chat.completions
-      .create(request as never)
-      .then((response) => {
-        const firstChoice = response.choices[0]
-        if (!firstChoice) throw new Error("No response choice from LLM")
-        const choice = firstChoice.message
-        return {
-          text: choice.content || "",
-          toolCalls: (choice.tool_calls || []) as ToolCallRecord[],
-          promptTokens: response.usage?.prompt_tokens || 0,
-        }
-      })
-  }
-
-  #parseArgs(argsString: unknown): ToolArgs {
-    if (
-      argsString &&
-      typeof argsString === "object" &&
-      !Array.isArray(argsString)
-    ) {
-      return argsString as ToolArgs
-    }
-
-    try {
-      return JSON.parse(String(argsString || "{}")) as ToolArgs
-    } catch {
-      return {}
     }
   }
 
   #pruneScreenshots() {
-    const screenshotIndexes: number[] = []
+    const imageIndexes: number[] = []
 
-    for (let i = 0; i < this.#messages.length; i += 1) {
+    for (let i = 0; i < this.#messages.length; i++) {
       const msg = this.#messages[i]
       if (!msg || !Array.isArray(msg.content)) continue
-      const hasImage = msg.content.some(
-        (part: MessageContentPart) =>
-          part.type === "image_url" &&
-          typeof part.image_url.url === "string" &&
-          part.image_url.url.startsWith("data:image/")
+      const hasImage = (msg.content as Array<{ type: string }>).some(
+        (part) => part.type === "image"
       )
-      if (hasImage) screenshotIndexes.push(i)
+      if (hasImage) imageIndexes.push(i)
     }
 
-    if (screenshotIndexes.length <= MAX_SCREENSHOT_MESSAGES) return
+    if (imageIndexes.length <= MAX_SCREENSHOT_MESSAGES) return
 
-    const toPrune = screenshotIndexes.slice(
+    const toPrune = imageIndexes.slice(
       0,
-      screenshotIndexes.length - MAX_SCREENSHOT_MESSAGES
+      imageIndexes.length - MAX_SCREENSHOT_MESSAGES
     )
 
     for (const index of toPrune) {
-      const msg = this.#messages[index]
-      if (!msg || !Array.isArray(msg.content)) continue
-
-      const kept = msg.content.filter(
-        (part: MessageContentPart) => part.type !== "image_url"
-      )
-      const hasMarker = kept.some(
-        (part: MessageContentPart) =>
-          part.type === "text" && part.text.includes(SCREENSHOT_OMITTED_TEXT)
-      )
-
-      if (!hasMarker) {
-        kept.push({ type: "text", text: SCREENSHOT_OMITTED_TEXT })
+      this.#messages[index] = {
+        role: "user",
+        content: SCREENSHOT_OMITTED_TEXT,
       }
-
-      msg.content = kept
     }
   }
 
@@ -385,6 +301,14 @@ export class QueryClient implements QueryRunner {
     if (!this.#state.isRunning || this.#state.queryId !== queryId) return
     this.#resetActiveQuery()
     this.emit({ type: "done", queryId, outcome })
+  }
+
+  #resetActiveQuery() {
+    this.#state.queryId = null
+    this.#state.isRunning = false
+    this.#state.pendingCallId = null
+    this.#abortController = null
+    this.#approvalResolver = null
   }
 
   #notifyHistory() {
