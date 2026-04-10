@@ -242,29 +242,6 @@ export function markChatWindowReady(): void {
   pendingRendererEvents = []
 }
 
-export function addSystemText(
-  text: string,
-  extra: Partial<QueryEvent> = {}
-): void {
-  sendChatEvent({
-    ...extra,
-    type: "message",
-    role: "system",
-    text: String(text || ""),
-  })
-}
-
-export function addAssistantText(
-  text: string,
-  extra: Partial<QueryEvent> = {}
-): void {
-  sendChatEvent({
-    ...extra,
-    type: "message",
-    role: "assistant",
-    text: String(text || ""),
-  })
-}
 
 export function setChatWindowContentProtection(enabled: boolean): void {
   if (chatWindow) {

@@ -1,5 +1,6 @@
 import "dotenv/config"
 import { app, BrowserWindow, ipcMain, nativeTheme } from "electron"
+import { randomUUID } from "node:crypto"
 import fs from "fs/promises"
 import path from "path"
 import { electronApp, optimizer } from "@electron-toolkit/utils"
@@ -16,10 +17,9 @@ import {
   recreateChatWindow,
   type ChatWindowMode,
 } from "./windows/chat"
-import { setOverlayContentProtection } from "./windows/overlay"
 import { createTriggerListener } from "./listener/trigger"
-import { createController } from "./controller/index"
-import { createQueryProcess } from "./query"
+import { QueryClient } from "./query"
+import { getSkillCatalog } from "./query/skills"
 import {
   transcribeAudio,
   isTranscriptionConfigured,
@@ -28,10 +28,9 @@ import type {
   DictationTranscribeInput,
   DictationTranscribeResult,
   QueryInitResult,
+  QueryEvent,
 } from "../shared/ipc-contract"
 
-// Dev toggle: force every query to run through the mock query runner.
-const FORCE_MOCK_QUERY_RUNNER = false
 type AppearanceMode = "light" | "dark" | "system"
 type SettingsData = {
   appearance?: AppearanceMode
@@ -48,12 +47,20 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  const controller = createController()
   const settingsPath = path.join(app.getPath("userData"), "settings.json")
   let appearance: AppearanceMode = "system"
   let chatMode: ChatWindowMode = "windowed"
 
   const ui = createWindowsSurface()
+
+  // Query client: emits events to the chat window
+  let queryRunning = false
+  const queryClient = new QueryClient((payload: QueryEvent) => {
+    ui.chat.send(payload)
+    if (payload.type === "done") {
+      queryRunning = false
+    }
+  })
 
   async function loadSettings() {
     try {
@@ -101,12 +108,6 @@ app.whenReady().then(async () => {
     ui.initWindows()
   })
 
-  const queryProcess = createQueryProcess({
-    forceMockQuery: FORCE_MOCK_QUERY_RUNNER,
-    controller,
-    ui,
-  })
-
   async function transcribeDictation(
     payload: Partial<DictationTranscribeInput> = {}
   ): Promise<DictationTranscribeResult> {
@@ -117,7 +118,6 @@ app.whenReady().then(async () => {
           "Voice transcription not configured. Set TRANSCRIBE_BASE_URL and TRANSCRIBE_API_KEY in .env",
       }
     }
-
     try {
       console.log("[dictation] transcribing audio...")
       const result = await transcribeAudio({
@@ -136,6 +136,7 @@ app.whenReady().then(async () => {
     }
   }
 
+  // IPC handlers
   ipcMain.handle("query:init", async (): Promise<QueryInitResult> => {
     ui.chat.markReady()
     return { success: true, messages: [] }
@@ -146,49 +147,60 @@ app.whenReady().then(async () => {
     async (
       _event,
       payload: { query?: string; threadId?: string | null } = {}
-    ) =>
-      queryProcess.start({
-        source: "chat",
-        query: String(payload.query || ""),
-        threadId: payload.threadId,
-      } as never)
+    ) => {
+      const query = String(payload.query || "").trim()
+      if (!query) return { success: false, error: "Empty query" }
+      if (queryRunning) {
+        return { success: false, error: "Query already running" }
+      }
+
+      const queryId = randomUUID()
+      queryRunning = true
+      // Run in background, don't await
+      void queryClient.start(queryId, query)
+      return { success: true, queryId }
+    }
   )
 
-  ipcMain.handle("query:cancel", async () => queryProcess.cancel())
+  ipcMain.handle("query:cancel", async () => {
+    queryClient.cancel()
+    return { success: true }
+  })
 
   ipcMain.handle("dictation:transcribe", async (_event, payload = {}) =>
     transcribeDictation(payload)
   )
 
   ipcMain.handle("skills:list", async () => {
-    return { success: true, skills: [] }
+    const skills = getSkillCatalog().map((s) => ({
+      id: s.name,
+      title: s.name,
+      search_text: s.description,
+    }))
+    return { success: true, skills }
   })
 
   const triggerListener = await createTriggerListener({
     onTriggerHoldStart: () => {
-      if (queryProcess.getInteractionState() !== "idle") return
+      if (queryRunning) return
       if (!ui.chat.isVisible()) return
       ui.chat.sendDictation({ type: "start" })
     },
     onTriggerHoldEnd: () => {
-      if (queryProcess.getInteractionState() !== "idle") return
+      if (queryRunning) return
       if (!ui.chat.isVisible()) return
       ui.chat.sendDictation({ type: "stop" })
     },
     onTriggerTap: async () => {
-      if (queryProcess.hasPendingAction()) {
-        await queryProcess.resolvePendingActionDecision(true)
-        return
-      }
-      if (queryProcess.getInteractionState() !== "idle") return
+      if (queryRunning) return
       ui.chat.toggle()
     },
     onEscape: async () => {
-      const state = queryProcess.getInteractionState()
-      if (state !== "active_query" && state !== "pending_action") return
-      await queryProcess.cancel({ reason: "user_interrupt" })
+      if (!queryRunning) return
+      queryClient.cancel()
     },
   })
+
   try {
     await loadSettings()
   } catch {
@@ -196,16 +208,6 @@ app.whenReady().then(async () => {
   }
 
   await ui.initWindows()
-
-  const captureFn = ui.getCaptureScreenshot()
-  if (captureFn) {
-    controller.setExternalCapture(() => captureFn())
-  }
-
-  controller.setContentProtection((enabled) => {
-    setChatWindowContentProtection(enabled)
-    setOverlayContentProtection(enabled)
-  })
 
   createSystemTray({
     onShowWindow: () => {
@@ -221,22 +223,13 @@ app.whenReady().then(async () => {
       setChatWindowMode(mode)
       setTrayChatWindowMode(mode)
       recreateChatWindow()
-      // Ensure the new window is visible after switching modes
       ui.chat.show()
       await saveSettings()
     },
     onQuit: () => app.quit(),
   })
 
-  try {
-    await controller.runFirstTimeOnboarding()
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.warn("First time onboarding failed:", message)
-  }
-
   app.on("will-quit", () => {
-    controller.cleanup()
     triggerListener.stop()
     destroyTray()
   })

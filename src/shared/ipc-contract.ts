@@ -11,21 +11,17 @@ export type ChatMessage = {
 }
 
 export type QueryEvent =
+  | { type: "thought"; queryId: string; text: string }
   | {
-      type: "message"
-      role: "assistant" | "system"
-      text: string
-      queryId?: string
-    }
-  | {
-      type: "tool_call"
+      type: "command"
       queryId: string
-      callId: string
-      toolName: string
-      args: Record<string, unknown>
+      description: string
+      cmd: string
+      output?: string
     }
-  | { type: "done"; queryId: string; outcome: "completed" | "failed" }
-  | { type: "error"; queryId?: string; code: string; message: string }
+  | { type: "response"; queryId: string; text: string }
+  | { type: "done"; queryId: string }
+  | { type: "error"; queryId?: string; message: string }
 
 export type QueryInitResult =
   | { success: true; messages: ChatMessage[] }
@@ -57,32 +53,6 @@ export type SkillsListResult = {
   }>
 }
 
-export type LauncherEvent = { type: "focus" }
-
-export type OverlayState =
-  | {
-      type: "loading"
-      text: string
-      stopHintText?: string
-    }
-  | {
-      type: "action"
-      text: string
-      acceptHintText?: string
-      stopHintText?: string
-    }
-  | { type: "message"; text: string }
-  | { type: "failure"; text: string }
-
-export type CaptureCommand =
-  | { type: "source-id"; sourceId: string }
-  | {
-      type: "request-frame"
-      highlightPosition?: { x: number; y: number }
-      highlightType?: "spotlight" | "crosshair"
-    }
-  | { type: "stop-capture" }
-
 export type OpenmnkApi = {
   query: {
     init: () => Promise<QueryInitResult>
@@ -101,21 +71,5 @@ export type OpenmnkApi = {
   }
   skills: {
     list: () => Promise<SkillsListResult>
-  }
-  launcher: {
-    resize: (input: { height: number }) => void
-    submit: (input: { query: string }) => void
-    dismiss: () => void
-    onEvent: (listener: (event: LauncherEvent) => void) => Unsubscribe
-  }
-  overlay: {
-    resize: (input: { height: number }) => void
-    onState: (listener: (state: OverlayState) => void) => Unsubscribe
-  }
-  capture: {
-    onCommand: (listener: (command: CaptureCommand) => void) => Unsubscribe
-    sendFrame: (input: { data: string | null }) => void
-    sendRecording: (input: { data: number[] }) => void
-    sendReady: () => void
   }
 }

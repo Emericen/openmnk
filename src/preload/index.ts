@@ -25,22 +25,6 @@ const openmnk: OpenmnkApi = {
   skills: {
     list: () => ipcRenderer.invoke("skills:list"),
   },
-  launcher: {
-    resize: (input) => ipcRenderer.send("launcher:resize", input),
-    submit: (input) => ipcRenderer.send("launcher:submit", input),
-    dismiss: () => ipcRenderer.send("launcher:dismiss"),
-    onEvent: (listener) => subscribe("launcher:event", listener),
-  },
-  overlay: {
-    resize: (input) => ipcRenderer.send("overlay:resize", input),
-    onState: (listener) => subscribe("overlay:state", listener),
-  },
-  capture: {
-    onCommand: (listener) => subscribe("capture:command", listener),
-    sendFrame: (input) => ipcRenderer.send("capture:frame", input),
-    sendRecording: (input) => ipcRenderer.send("capture:recording", input),
-    sendReady: () => ipcRenderer.send("capture:ready"),
-  },
 }
 
 if (process.contextIsolated) {
