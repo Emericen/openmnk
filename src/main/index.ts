@@ -1,5 +1,6 @@
 import "dotenv/config"
 import { app, BrowserWindow, ipcMain, nativeTheme } from "electron"
+import { randomUUID } from "node:crypto"
 import fs from "fs/promises"
 import path from "path"
 import { electronApp, optimizer } from "@electron-toolkit/utils"
@@ -7,19 +8,11 @@ import {
   createSystemTray,
   destroyTray,
   setTrayAppearance,
-  setTrayChatWindowMode,
 } from "./windows/tray"
-import { createWindowsSurface } from "./windows/index"
-import {
-  setChatWindowMode,
-  setChatWindowContentProtection,
-  recreateChatWindow,
-  type ChatWindowMode,
-} from "./windows/chat"
-import { setOverlayContentProtection } from "./windows/overlay"
+import * as chat from "./windows/chat"
 import { createTriggerListener } from "./listener/trigger"
-import { createController } from "./controller/index"
-import { createQueryProcess } from "./query"
+import { QueryClient } from "./query/client"
+import { getSkillCatalog } from "./query/skills"
 import {
   transcribeAudio,
   isTranscriptionConfigured,
@@ -28,15 +21,10 @@ import type {
   DictationTranscribeInput,
   DictationTranscribeResult,
   QueryInitResult,
+  QueryEvent,
 } from "../shared/ipc-contract"
 
-// Dev toggle: force every query to run through the mock query runner.
-const FORCE_MOCK_QUERY_RUNNER = false
 type AppearanceMode = "light" | "dark" | "system"
-type SettingsData = {
-  appearance?: AppearanceMode
-  chatWindowMode?: ChatWindowMode
-}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -48,25 +36,27 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  const controller = createController()
   const settingsPath = path.join(app.getPath("userData"), "settings.json")
   let appearance: AppearanceMode = "system"
-  let chatMode: ChatWindowMode = "windowed"
 
-  const ui = createWindowsSurface()
+  // Query client: emits events to the chat window
+  let queryRunning = false
+  const queryClient = new QueryClient((payload: QueryEvent) => {
+    chat.sendEvent(payload)
+    if (payload.type === "done") {
+      queryRunning = false
+    }
+  })
 
   async function loadSettings() {
     try {
       const raw = await fs.readFile(settingsPath, "utf-8")
-      const parsed = JSON.parse(raw) as SettingsData
+      const parsed = JSON.parse(raw) as { appearance?: AppearanceMode }
       appearance = parsed?.appearance || "system"
-      chatMode = parsed?.chatWindowMode || "windowed"
     } catch {
       appearance = "system"
-      chatMode = "windowed"
     }
     applyAppearance()
-    applyChatWindowMode()
   }
 
   function applyAppearance() {
@@ -75,36 +65,18 @@ app.whenReady().then(async () => {
     setTrayAppearance(appearance)
   }
 
-  function applyChatWindowMode() {
-    setChatWindowMode(chatMode)
-    setTrayChatWindowMode(chatMode)
-  }
-
   async function saveSettings() {
     await fs.mkdir(path.dirname(settingsPath), { recursive: true })
     await fs.writeFile(
       settingsPath,
-      JSON.stringify(
-        {
-          appearance: appearance || "system",
-          chatWindowMode: chatMode || "windowed",
-        },
-        null,
-        2
-      ),
+      JSON.stringify({ appearance: appearance || "system" }, null, 2),
       "utf-8"
     )
   }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length !== 0) return
-    ui.initWindows()
-  })
-
-  const queryProcess = createQueryProcess({
-    forceMockQuery: FORCE_MOCK_QUERY_RUNNER,
-    controller,
-    ui,
+    chat.createChatWindow()
   })
 
   async function transcribeDictation(
@@ -113,130 +85,97 @@ app.whenReady().then(async () => {
     if (!isTranscriptionConfigured()) {
       return {
         success: false,
-        error:
-          "Voice transcription not configured. Set TRANSCRIBE_BASE_URL and TRANSCRIBE_API_KEY in .env",
+        error: "Voice transcription not configured. Set TRANSCRIBE_BASE_URL and TRANSCRIBE_API_KEY in .env",
       }
     }
-
     try {
-      console.log("[dictation] transcribing audio...")
       const result = await transcribeAudio({
         audio: String(payload.audio || ""),
         filename: payload.filename || "recording.webm",
       })
-      console.log("[dictation] result:", {
-        success: true,
-        textLength: result?.text?.length,
-      })
       return { success: true, text: String(result?.text || "") }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      console.error("[dictation] error:", message)
       return { success: false, error: message }
     }
   }
 
+  // IPC handlers
   ipcMain.handle("query:init", async (): Promise<QueryInitResult> => {
-    ui.chat.markReady()
+    chat.markReady()
     return { success: true, messages: [] }
   })
 
   ipcMain.handle(
     "query:start",
-    async (
-      _event,
-      payload: { query?: string; threadId?: string | null } = {}
-    ) =>
-      queryProcess.start({
-        source: "chat",
-        query: String(payload.query || ""),
-        threadId: payload.threadId,
-      } as never)
+    async (_event, payload: { query?: string } = {}) => {
+      const query = String(payload.query || "").trim()
+      if (!query) return { success: false, error: "Empty query" }
+      if (queryRunning) return { success: false, error: "Query already running" }
+
+      const queryId = randomUUID()
+      queryRunning = true
+      void queryClient.start(queryId, query)
+      return { success: true, queryId }
+    }
   )
 
-  ipcMain.handle("query:cancel", async () => queryProcess.cancel())
+  ipcMain.handle("query:cancel", async () => {
+    queryClient.cancel()
+    return { success: true }
+  })
 
   ipcMain.handle("dictation:transcribe", async (_event, payload = {}) =>
     transcribeDictation(payload)
   )
 
   ipcMain.handle("skills:list", async () => {
-    return { success: true, skills: [] }
+    const skills = getSkillCatalog().map((s) => ({
+      id: s.name,
+      title: s.name,
+      search_text: s.description,
+    }))
+    return { success: true, skills }
   })
 
   const triggerListener = await createTriggerListener({
     onTriggerHoldStart: () => {
-      if (queryProcess.getInteractionState() !== "idle") return
-      if (!ui.chat.isVisible()) return
-      ui.chat.sendDictation({ type: "start" })
+      if (queryRunning || !chat.isVisible()) return
+      chat.sendDictation({ type: "start" })
     },
     onTriggerHoldEnd: () => {
-      if (queryProcess.getInteractionState() !== "idle") return
-      if (!ui.chat.isVisible()) return
-      ui.chat.sendDictation({ type: "stop" })
+      if (queryRunning || !chat.isVisible()) return
+      chat.sendDictation({ type: "stop" })
     },
     onTriggerTap: async () => {
-      if (queryProcess.hasPendingAction()) {
-        await queryProcess.resolvePendingActionDecision(true)
-        return
-      }
-      if (queryProcess.getInteractionState() !== "idle") return
-      ui.chat.toggle()
+      if (queryRunning) return
+      chat.toggle()
     },
     onEscape: async () => {
-      const state = queryProcess.getInteractionState()
-      if (state !== "active_query" && state !== "pending_action") return
-      await queryProcess.cancel({ reason: "user_interrupt" })
+      if (!queryRunning) return
+      queryClient.cancel()
     },
   })
+
   try {
     await loadSettings()
   } catch {
     // defaults already set
   }
 
-  await ui.initWindows()
-
-  const captureFn = ui.getCaptureScreenshot()
-  if (captureFn) {
-    controller.setExternalCapture(() => captureFn())
-  }
-
-  controller.setContentProtection((enabled) => {
-    setChatWindowContentProtection(enabled)
-    setOverlayContentProtection(enabled)
-  })
+  chat.createChatWindow()
 
   createSystemTray({
-    onShowWindow: () => {
-      ui.chat.show()
-    },
+    onShowWindow: () => chat.show(),
     onAppearanceChange: async (mode: AppearanceMode) => {
       appearance = mode
       applyAppearance()
       await saveSettings()
     },
-    onChatWindowModeChange: async (mode: ChatWindowMode) => {
-      chatMode = mode
-      setChatWindowMode(mode)
-      setTrayChatWindowMode(mode)
-      recreateChatWindow()
-      // Ensure the new window is visible after switching modes
-      ui.chat.show()
-      await saveSettings()
-    },
     onQuit: () => app.quit(),
   })
 
-  try {
-    await controller.runFirstTimeOnboarding()
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.warn("First time onboarding failed:", message)
-  }
-
   app.on("will-quit", () => {
-    controller.cleanup()
     triggerListener.stop()
     destroyTray()
   })

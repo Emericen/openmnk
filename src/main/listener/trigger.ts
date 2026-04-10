@@ -1,6 +1,5 @@
 import { createProvider } from "./providers/index"
 
-type TriggerMode = "loading" | "action"
 type TriggerKeyName =
   | "control"
   | "control_left"
@@ -10,15 +9,6 @@ type TriggerKeyName =
   | "shift"
   | "escape"
   | string
-
-type OverlayShortcutHints =
-  | { stopKeyLabel: string; stopHintText: string }
-  | {
-      acceptKeyLabel: string
-      stopKeyLabel: string
-      acceptHintText: string
-      stopHintText: string
-    }
 
 type TriggerCallbackPayload = {
   triggerKey: string
@@ -170,27 +160,6 @@ function buildBindings(triggerKey: string): { tap: string; hold: string } {
   return {
     tap: `${label} Tap`,
     hold: `Hold ${label}`,
-  }
-}
-
-export function getOverlayShortcutHints(
-  mode: TriggerMode = "action"
-): OverlayShortcutHints {
-  const acceptKeyLabel = normalizeDisplayKey(TRIGGER_CONFIG.triggerKey)
-  const stopKeyLabel = normalizeDisplayKey("escape")
-
-  if (mode === "loading") {
-    return {
-      stopKeyLabel,
-      stopHintText: `Stop (${stopKeyLabel})`,
-    }
-  }
-
-  return {
-    acceptKeyLabel,
-    stopKeyLabel,
-    acceptHintText: `Accept (${acceptKeyLabel})`,
-    stopHintText: `Stop (${stopKeyLabel})`,
   }
 }
 

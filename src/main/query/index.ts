@@ -1,1 +1,0 @@
-export { createQueryProcess } from "./queryProcess"

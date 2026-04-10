@@ -22,7 +22,6 @@ export const UIPhase = Object.freeze({
 
 export const UIEvent = Object.freeze({
   SUBMIT_TEXT: "submit_text",
-  MESSAGE_RECEIVED: "message_received",
   REQUEST_DONE: "request_done",
   REQUEST_ERROR: "request_error",
   START_DICTATION: "start_dictation",
@@ -67,7 +66,6 @@ const UI_TRANSITIONS: Record<
     [UIEvent.START_DICTATION]: UIPhase.DICTATING,
   },
   [UIPhase.SUBMITTING]: {
-    [UIEvent.MESSAGE_RECEIVED]: UIPhase.READY,
     [UIEvent.REQUEST_DONE]: UIPhase.READY,
     [UIEvent.REQUEST_ERROR]: UIPhase.READY,
     [UIEvent.CANCEL]: UIPhase.READY,
@@ -111,26 +109,16 @@ function reseedCounter(messages: ChatMessage[]): void {
   msgCounter = max
 }
 
-function appendTextMessage(
+function appendMessage(
   messages: ChatMessage[],
-  {
-    role = "assistant",
-    text = "",
-  }: {
-    role?: Extract<QueryEvent, { type: "message" }>["role"]
-    text?: string
-  }
+  role: "assistant" | "system",
+  text: string
 ): ChatMessage[] {
   const content = String(text || "").trim()
   if (!content) return messages
-
   return [
     ...messages,
-    {
-      id: nextId(),
-      role: role === "system" ? "system" : "assistant",
-      content: [{ type: "text", text: content }],
-    },
+    { id: nextId(), role, content: [{ type: "text", text: content }] },
   ]
 }
 
@@ -176,19 +164,37 @@ export const useChatRuntimeStore = create<ChatRuntimeStoreState>((set, get) => {
 
     initQueryBridge: async () => {
       if (!querySubscribed) {
-        window.openmnk.query.onEvent((event) => {
+        window.openmnk.query.onEvent((event: QueryEvent) => {
           if (!event?.type) return
 
-          if (event.type === "message") {
-            const role = event.role === "system" ? "system" : "assistant"
-            updateAllMessages((messages) =>
-              appendTextMessage(messages, { role, text: event.text || "" })
+          if (event.type === "thought") {
+            updateAllMessages((msgs) =>
+              appendMessage(msgs, "system", event.text)
             )
-            transitionUI(UIEvent.MESSAGE_RECEIVED)
+            return
+          }
+
+          if (event.type === "command") {
+            const label = event.output
+              ? `${event.description}\n\`${event.cmd}\`\n→ ${event.output.slice(0, 200)}`
+              : `${event.description}: \`${event.cmd}\``
+            updateAllMessages((msgs) =>
+              appendMessage(msgs, "system", label)
+            )
+            return
+          }
+
+          if (event.type === "response") {
+            updateAllMessages((msgs) =>
+              appendMessage(msgs, "assistant", event.text)
+            )
             return
           }
 
           if (event.type === "error") {
+            updateAllMessages((msgs) =>
+              appendMessage(msgs, "system", `Error: ${event.message}`)
+            )
             transitionUI(UIEvent.REQUEST_ERROR)
             return
           }
@@ -257,10 +263,7 @@ export const useChatRuntimeStore = create<ChatRuntimeStoreState>((set, get) => {
           const errorText =
             "error" in result ? result.error : "Failed to start query"
           updateAllMessages((messages) =>
-            appendTextMessage(messages, {
-              role: "system",
-              text: String(errorText || "Failed to start query"),
-            })
+            appendMessage(messages, "system", String(errorText))
           )
           transitionUI(UIEvent.REQUEST_ERROR)
         }
@@ -271,10 +274,7 @@ export const useChatRuntimeStore = create<ChatRuntimeStoreState>((set, get) => {
             : String(error || "Unknown error")
 
         updateAllMessages((messages) =>
-          appendTextMessage(messages, {
-            role: "system",
-            text: `Error: ${message}`,
-          })
+          appendMessage(messages, "system", `Error: ${message}`)
         )
         transitionUI(UIEvent.REQUEST_ERROR)
       }
