@@ -8,17 +8,10 @@ import {
   createSystemTray,
   destroyTray,
   setTrayAppearance,
-  setTrayChatWindowMode,
 } from "./windows/tray"
-import { createWindowsSurface } from "./windows/index"
-import {
-  setChatWindowMode,
-  setChatWindowContentProtection,
-  recreateChatWindow,
-  type ChatWindowMode,
-} from "./windows/chat"
+import * as chat from "./windows/chat"
 import { createTriggerListener } from "./listener/trigger"
-import { QueryClient } from "./query"
+import { QueryClient } from "./query/client"
 import { getSkillCatalog } from "./query/skills"
 import {
   transcribeAudio,
@@ -32,10 +25,6 @@ import type {
 } from "../shared/ipc-contract"
 
 type AppearanceMode = "light" | "dark" | "system"
-type SettingsData = {
-  appearance?: AppearanceMode
-  chatWindowMode?: ChatWindowMode
-}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -49,14 +38,11 @@ app.whenReady().then(async () => {
 
   const settingsPath = path.join(app.getPath("userData"), "settings.json")
   let appearance: AppearanceMode = "system"
-  let chatMode: ChatWindowMode = "windowed"
-
-  const ui = createWindowsSurface()
 
   // Query client: emits events to the chat window
   let queryRunning = false
   const queryClient = new QueryClient((payload: QueryEvent) => {
-    ui.chat.send(payload)
+    chat.sendEvent(payload)
     if (payload.type === "done") {
       queryRunning = false
     }
@@ -65,15 +51,12 @@ app.whenReady().then(async () => {
   async function loadSettings() {
     try {
       const raw = await fs.readFile(settingsPath, "utf-8")
-      const parsed = JSON.parse(raw) as SettingsData
+      const parsed = JSON.parse(raw) as { appearance?: AppearanceMode }
       appearance = parsed?.appearance || "system"
-      chatMode = parsed?.chatWindowMode || "windowed"
     } catch {
       appearance = "system"
-      chatMode = "windowed"
     }
     applyAppearance()
-    applyChatWindowMode()
   }
 
   function applyAppearance() {
@@ -82,30 +65,18 @@ app.whenReady().then(async () => {
     setTrayAppearance(appearance)
   }
 
-  function applyChatWindowMode() {
-    setChatWindowMode(chatMode)
-    setTrayChatWindowMode(chatMode)
-  }
-
   async function saveSettings() {
     await fs.mkdir(path.dirname(settingsPath), { recursive: true })
     await fs.writeFile(
       settingsPath,
-      JSON.stringify(
-        {
-          appearance: appearance || "system",
-          chatWindowMode: chatMode || "windowed",
-        },
-        null,
-        2
-      ),
+      JSON.stringify({ appearance: appearance || "system" }, null, 2),
       "utf-8"
     )
   }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length !== 0) return
-    ui.initWindows()
+    chat.createChatWindow()
   })
 
   async function transcribeDictation(
@@ -114,49 +85,36 @@ app.whenReady().then(async () => {
     if (!isTranscriptionConfigured()) {
       return {
         success: false,
-        error:
-          "Voice transcription not configured. Set TRANSCRIBE_BASE_URL and TRANSCRIBE_API_KEY in .env",
+        error: "Voice transcription not configured. Set TRANSCRIBE_BASE_URL and TRANSCRIBE_API_KEY in .env",
       }
     }
     try {
-      console.log("[dictation] transcribing audio...")
       const result = await transcribeAudio({
         audio: String(payload.audio || ""),
         filename: payload.filename || "recording.webm",
       })
-      console.log("[dictation] result:", {
-        success: true,
-        textLength: result?.text?.length,
-      })
       return { success: true, text: String(result?.text || "") }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      console.error("[dictation] error:", message)
       return { success: false, error: message }
     }
   }
 
   // IPC handlers
   ipcMain.handle("query:init", async (): Promise<QueryInitResult> => {
-    ui.chat.markReady()
+    chat.markReady()
     return { success: true, messages: [] }
   })
 
   ipcMain.handle(
     "query:start",
-    async (
-      _event,
-      payload: { query?: string; threadId?: string | null } = {}
-    ) => {
+    async (_event, payload: { query?: string } = {}) => {
       const query = String(payload.query || "").trim()
       if (!query) return { success: false, error: "Empty query" }
-      if (queryRunning) {
-        return { success: false, error: "Query already running" }
-      }
+      if (queryRunning) return { success: false, error: "Query already running" }
 
       const queryId = randomUUID()
       queryRunning = true
-      // Run in background, don't await
       void queryClient.start(queryId, query)
       return { success: true, queryId }
     }
@@ -182,18 +140,16 @@ app.whenReady().then(async () => {
 
   const triggerListener = await createTriggerListener({
     onTriggerHoldStart: () => {
-      if (queryRunning) return
-      if (!ui.chat.isVisible()) return
-      ui.chat.sendDictation({ type: "start" })
+      if (queryRunning || !chat.isVisible()) return
+      chat.sendDictation({ type: "start" })
     },
     onTriggerHoldEnd: () => {
-      if (queryRunning) return
-      if (!ui.chat.isVisible()) return
-      ui.chat.sendDictation({ type: "stop" })
+      if (queryRunning || !chat.isVisible()) return
+      chat.sendDictation({ type: "stop" })
     },
     onTriggerTap: async () => {
       if (queryRunning) return
-      ui.chat.toggle()
+      chat.toggle()
     },
     onEscape: async () => {
       if (!queryRunning) return
@@ -207,23 +163,13 @@ app.whenReady().then(async () => {
     // defaults already set
   }
 
-  await ui.initWindows()
+  chat.createChatWindow()
 
   createSystemTray({
-    onShowWindow: () => {
-      ui.chat.show()
-    },
+    onShowWindow: () => chat.show(),
     onAppearanceChange: async (mode: AppearanceMode) => {
       appearance = mode
       applyAppearance()
-      await saveSettings()
-    },
-    onChatWindowModeChange: async (mode: ChatWindowMode) => {
-      chatMode = mode
-      setChatWindowMode(mode)
-      setTrayChatWindowMode(mode)
-      recreateChatWindow()
-      ui.chat.show()
       await saveSettings()
     },
     onQuit: () => app.quit(),

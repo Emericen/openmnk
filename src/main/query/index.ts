@@ -1,1 +1,0 @@
-export { QueryClient } from "./client"
