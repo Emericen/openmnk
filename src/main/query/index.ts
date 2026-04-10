@@ -1,1 +1,1 @@
-export { createQueryProcess } from "./queryProcess"
+export { QueryClient } from "./client"

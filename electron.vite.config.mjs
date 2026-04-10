@@ -19,9 +19,7 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          capture: resolve("src/renderer/capture/capture.html"),
           index: resolve("src/renderer/index.html"),
-          overlay: resolve("src/renderer/overlay.html"),
         },
       },
     },
