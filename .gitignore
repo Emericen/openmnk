@@ -7,3 +7,4 @@ out/
 Thumbs.db
 *.mov
 *.mp4
+.claude/

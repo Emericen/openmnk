@@ -1,17 +1,68 @@
 import { execSync } from "child_process"
 import OpenAI from "openai"
-import {
-  getPlatformHint,
-  LLM_API_KEY,
-  LLM_BASE_URL,
-  LLM_MAX_TOKENS,
-  LLM_MODEL,
-  LLM_TEMPERATURE,
-  MAX_STEPS,
-  SYSTEM_MESSAGE,
-} from "./config"
-import { TOOLS } from "./tools"
 import type { QueryEmit, QueryRunner } from "./types"
+
+// --- Config ---
+
+const LLM_BASE_URL = process.env.LLM_BASE_URL || ""
+const LLM_API_KEY = process.env.LLM_API_KEY || ""
+const LLM_MODEL = process.env.LLM_MODEL || "gpt-4.1-mini"
+const LLM_TEMPERATURE = parseFloat(process.env.LLM_TEMPERATURE || "0.0")
+const LLM_MAX_TOKENS = parseInt(process.env.LLM_MAX_TOKENS || "2048", 10)
+const MAX_STEPS = parseInt(process.env.MAX_STEPS || "100", 10)
+
+const SYSTEM_MESSAGE = `You are a pragmatic desktop assistant that controls the user's computer via shell commands.
+
+You have one tool: run_command. Use it to execute any shell command. For GUI automation on macOS, use osascript/JXA. For screenshots, use screencapture. For file operations, use standard shell commands.
+
+Rules:
+- Between tool calls, keep text to one short plain-text sentence. No markdown.
+- All markdown and detailed responses go in your final message only.
+- Always check the screen state before acting when the user refers to something visual.
+- If a command fails, try a different approach.
+- Use run_command for everything: file ops, app control, screenshots, mouse/keyboard via osascript.`
+
+function getPlatformHint(): string {
+  if (process.platform === "darwin") {
+    return "\nThe user is on macOS. Use osascript for GUI automation. Use 'cmd' for Mac shortcuts."
+  }
+  if (process.platform === "win32") {
+    return "\nThe user is on Windows. Use PowerShell for automation. Use 'ctrl' for shortcuts."
+  }
+  if (process.platform === "linux") {
+    return "\nThe user is on Linux. Use xdotool for GUI automation. Use 'ctrl' for shortcuts."
+  }
+  return ""
+}
+
+// --- Tool definition ---
+
+const TOOLS = [
+  {
+    type: "function" as const,
+    function: {
+      name: "run_command",
+      description:
+        "Execute a shell command. Use for file operations, running scripts, osascript/JXA for GUI control, screenshots via screencapture, etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          description: {
+            type: "string",
+            description: "What this command does (shown to user)",
+          },
+          cmd: {
+            type: "string",
+            description: "The shell command to execute",
+          },
+        },
+        required: ["description", "cmd"],
+      },
+    },
+  },
+]
+
+// --- Helpers ---
 
 type Message =
   | { role: "system"; content: string }
