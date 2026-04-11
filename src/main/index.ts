@@ -4,25 +4,13 @@ import { randomUUID } from "node:crypto"
 import fs from "fs/promises"
 import path from "path"
 import { electronApp, optimizer } from "@electron-toolkit/utils"
-import {
-  createSystemTray,
-  destroyTray,
-  setTrayAppearance,
-} from "./windows/tray"
+import { createSystemTray, destroyTray, setTrayAppearance } from "./windows/tray"
 import * as chat from "./windows/chat"
 import { createTriggerListener } from "./listener/trigger"
-import { QueryClient } from "./query/client"
-import { getSkillCatalog } from "./query/skills"
-import {
-  transcribeAudio,
-  isTranscriptionConfigured,
-} from "./processes/transcribe"
-import type {
-  DictationTranscribeInput,
-  DictationTranscribeResult,
-  QueryInitResult,
-  QueryEvent,
-} from "../shared/ipc-contract"
+import { Session } from "./clients/session"
+import { getSkillCatalog, getSkillContent } from "./clients/skills"
+import { transcribeAudio, isTranscriptionConfigured } from "./clients/transcribe"
+import type { SessionCommand, SessionEvent } from "../shared/ipc-contract"
 
 type AppearanceMode = "light" | "dark" | "system"
 
@@ -36,57 +24,60 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // --- Settings ---
+
   const settingsPath = path.join(app.getPath("userData"), "settings.json")
   let appearance: AppearanceMode = "system"
-
-  // Query client: emits events to the chat window
-  let queryRunning = false
-  const queryClient = new QueryClient((payload: QueryEvent) => {
-    chat.sendEvent(payload)
-    if (payload.type === "done") {
-      queryRunning = false
-    }
-  })
 
   async function loadSettings() {
     try {
       const raw = await fs.readFile(settingsPath, "utf-8")
-      const parsed = JSON.parse(raw) as { appearance?: AppearanceMode }
-      appearance = parsed?.appearance || "system"
+      appearance = (JSON.parse(raw) as { appearance?: AppearanceMode }).appearance || "system"
     } catch {
       appearance = "system"
     }
-    applyAppearance()
-  }
-
-  function applyAppearance() {
-    nativeTheme.themeSource =
-      appearance === "light" || appearance === "dark" ? appearance : "system"
+    nativeTheme.themeSource = appearance === "light" || appearance === "dark" ? appearance : "system"
     setTrayAppearance(appearance)
   }
 
   async function saveSettings() {
     await fs.mkdir(path.dirname(settingsPath), { recursive: true })
-    await fs.writeFile(
-      settingsPath,
-      JSON.stringify({ appearance: appearance || "system" }, null, 2),
-      "utf-8"
-    )
+    await fs.writeFile(settingsPath, JSON.stringify({ appearance }, null, 2), "utf-8")
   }
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length !== 0) return
-    chat.createChatWindow()
+  // --- Session ---
+
+  let session: Session | null = null
+
+  function emit(event: SessionEvent) {
+    chat.send("session", event)
+    if (event.type === "done" || event.type === "error") {
+      session = null
+    }
+  }
+
+  // Mark renderer ready (flushes pending events)
+  ipcMain.on("ready", () => chat.markReady())
+
+  // Session channel: bidirectional
+  ipcMain.on("session", (_event, command: SessionCommand) => {
+    if (command.type === "start") {
+      if (session?.running) return
+      session = new Session(emit)
+      // TODO: if command.skill, load skill content and prepend to system message
+      void session.start(randomUUID(), command.text)
+    }
+    if (command.type === "cancel") {
+      session?.cancel()
+      session = null
+    }
   })
 
-  async function transcribeDictation(
-    payload: Partial<DictationTranscribeInput> = {}
-  ): Promise<DictationTranscribeResult> {
+  // --- Request/response handlers ---
+
+  ipcMain.handle("dictation:transcribe", async (_event, payload = {}) => {
     if (!isTranscriptionConfigured()) {
-      return {
-        success: false,
-        error: "Voice transcription not configured. Set TRANSCRIBE_BASE_URL and TRANSCRIBE_API_KEY in .env",
-      }
+      return { success: false, error: "Voice transcription not configured." }
     }
     try {
       const result = await transcribeAudio({
@@ -95,88 +86,61 @@ app.whenReady().then(async () => {
       })
       return { success: true, text: String(result?.text || "") }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      return { success: false, error: message }
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
     }
-  }
-
-  // IPC handlers
-  ipcMain.handle("query:init", async (): Promise<QueryInitResult> => {
-    chat.markReady()
-    return { success: true, messages: [] }
   })
-
-  ipcMain.handle(
-    "query:start",
-    async (_event, payload: { query?: string } = {}) => {
-      const query = String(payload.query || "").trim()
-      if (!query) return { success: false, error: "Empty query" }
-      if (queryRunning) return { success: false, error: "Query already running" }
-
-      const queryId = randomUUID()
-      queryRunning = true
-      void queryClient.start(queryId, query)
-      return { success: true, queryId }
-    }
-  )
-
-  ipcMain.handle("query:cancel", async () => {
-    queryClient.cancel()
-    return { success: true }
-  })
-
-  ipcMain.handle("dictation:transcribe", async (_event, payload = {}) =>
-    transcribeDictation(payload)
-  )
 
   ipcMain.handle("skills:list", async () => {
-    const skills = getSkillCatalog().map((s) => ({
+    return getSkillCatalog().map((s) => ({
       id: s.name,
-      title: s.name,
-      search_text: s.description,
+      name: s.name,
+      description: s.description,
     }))
-    return { success: true, skills }
   })
 
-  const triggerListener = await createTriggerListener({
+  // --- Trigger ---
+
+  const trigger = await createTriggerListener({
     onTriggerHoldStart: () => {
-      if (queryRunning || !chat.isVisible()) return
-      chat.sendDictation({ type: "start" })
+      if (session?.running || !chat.isVisible()) return
+      chat.send("dictation:command", { type: "start" })
     },
     onTriggerHoldEnd: () => {
-      if (queryRunning || !chat.isVisible()) return
-      chat.sendDictation({ type: "stop" })
+      if (session?.running || !chat.isVisible()) return
+      chat.send("dictation:command", { type: "stop" })
     },
-    onTriggerTap: async () => {
-      if (queryRunning) return
+    onTriggerTap: () => {
+      if (session?.running) return
       chat.toggle()
     },
-    onEscape: async () => {
-      if (!queryRunning) return
-      queryClient.cancel()
+    onEscape: () => {
+      session?.cancel()
+      session = null
     },
   })
 
-  try {
-    await loadSettings()
-  } catch {
-    // defaults already set
-  }
+  // --- Startup ---
 
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) chat.createChatWindow()
+  })
+
+  await loadSettings()
   chat.createChatWindow()
 
   createSystemTray({
     onShowWindow: () => chat.show(),
     onAppearanceChange: async (mode: AppearanceMode) => {
       appearance = mode
-      applyAppearance()
+      nativeTheme.themeSource = mode === "light" || mode === "dark" ? mode : "system"
+      setTrayAppearance(mode)
       await saveSettings()
     },
     onQuit: () => app.quit(),
   })
 
   app.on("will-quit", () => {
-    triggerListener.stop()
+    trigger.stop()
     destroyTray()
   })
 })

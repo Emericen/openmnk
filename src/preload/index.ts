@@ -2,21 +2,17 @@ import type { OpenmnkApi } from "../shared/ipc-contract"
 import { contextBridge, ipcRenderer } from "electron"
 import { electronAPI } from "@electron-toolkit/preload"
 
-function subscribe<T>(
-  channel: string,
-  callback: (payload: T) => void
-): () => void {
+function subscribe<T>(channel: string, callback: (payload: T) => void): () => void {
   const listener = (_event: unknown, payload: T) => callback(payload)
   ipcRenderer.on(channel, listener)
   return () => ipcRenderer.removeListener(channel, listener)
 }
 
 const openmnk: OpenmnkApi = {
-  query: {
-    init: () => ipcRenderer.invoke("query:init"),
-    start: (input) => ipcRenderer.invoke("query:start", input),
-    cancel: () => ipcRenderer.invoke("query:cancel"),
-    onEvent: (listener) => subscribe("query:event", listener),
+  ready: () => ipcRenderer.send("ready"),
+  session: {
+    send: (command) => ipcRenderer.send("session", command),
+    onEvent: (listener) => subscribe("session", listener),
   },
   dictation: {
     transcribe: (input) => ipcRenderer.invoke("dictation:transcribe", input),
@@ -40,9 +36,6 @@ if (process.contextIsolated) {
       electron: typeof electronAPI
       openmnk: OpenmnkApi
     },
-    {
-      electron: electronAPI,
-      openmnk,
-    }
+    { electron: electronAPI, openmnk }
   )
 }

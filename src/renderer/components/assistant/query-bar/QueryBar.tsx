@@ -51,7 +51,7 @@ export function QueryBar() {
 
     return skills
       .filter((skill) =>
-        String(skill?.search_text || skill?.title || "")
+        String(skill?.description || skill?.name || "")
           .toLowerCase()
           .includes(query)
       )
@@ -80,13 +80,13 @@ export function QueryBar() {
   }, [])
 
   const runSuggestedSkill = useCallback(
-    async (skill: SkillSummary) => {
-      const title = String(skill?.title || "").trim()
-      if (!title || inputDisabled) return
+    (skill: SkillSummary) => {
+      const name = String(skill?.name || "").trim()
+      if (!name || inputDisabled) return
 
       setInputText("")
       resetComposerText()
-      await sendMessage(title, { skillId: skill.id })
+      sendMessage(`/${name}`)
     },
     [inputDisabled, resetComposerText, sendMessage]
   )

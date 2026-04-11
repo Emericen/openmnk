@@ -2,7 +2,8 @@ import type { ReactNode } from "react"
 
 type SkillSummary = {
   id: string
-  title: string
+  name: string
+  description: string
 }
 
 export function SkillSuggestions({
@@ -32,7 +33,7 @@ export function SkillSuggestions({
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-sm text-foreground truncate">
-                  {renderHighlightedTitle(skill.title, inputText)}
+                  {renderHighlightedTitle(skill.name, inputText)}
                 </div>
               </div>
             </div>

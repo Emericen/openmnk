@@ -1,12 +1,8 @@
 import { app, BrowserWindow, nativeImage, screen, shell } from "electron"
 import { join } from "path"
 import { is } from "@electron-toolkit/utils"
-import type { DictationCommand, QueryEvent } from "../../shared/ipc-contract"
 
-type PendingEvent = {
-  channel: "query:event" | "dictation:command"
-  payload: QueryEvent | DictationCommand
-}
+type PendingEvent = { channel: string; payload: unknown }
 
 let window: BrowserWindow | null = null
 let ready = false
@@ -57,9 +53,7 @@ export function createChatWindow(): BrowserWindow {
   window.on("ready-to-show", () => {
     if (!IS_E2E_HIDDEN) show()
   })
-
   window.on("close", () => app.quit())
-
   window.on("closed", () => {
     window = null
     ready = false
@@ -80,14 +74,6 @@ export function show(): void {
   window.show()
   window.restore()
   window.focus()
-}
-
-export function hide(): void {
-  if (IS_E2E_HIDDEN || !window) return
-  if (process.platform === "win32") window.minimize()
-  window.blur()
-  window.hide()
-  if (process.platform === "darwin") app.hide()
 }
 
 export function toggle(): void {
@@ -113,15 +99,7 @@ export function markReady(): void {
   pending = []
 }
 
-export function sendEvent(payload: QueryEvent): void {
-  send("query:event", payload)
-}
-
-export function sendDictation(payload: DictationCommand): void {
-  send("dictation:command", payload)
-}
-
-function send(channel: PendingEvent["channel"], payload: PendingEvent["payload"]): void {
+export function send(channel: string, payload: unknown): void {
   if (window && !window.webContents.isDestroyed() && ready) {
     window.webContents.send(channel, payload)
     return

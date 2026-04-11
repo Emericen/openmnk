@@ -1,8 +1,8 @@
 import { create } from "zustand"
 import type {
   ChatMessage,
-  SkillsListResult,
-  QueryEvent,
+  SessionEvent,
+  SkillSummary,
 } from "../../shared/ipc-contract"
 import {
   getLatestWindow,
@@ -11,7 +11,7 @@ import {
 } from "./chatWindowing"
 
 let msgCounter = 0
-let querySubscribed = false
+let subscribed = false
 
 export const UIPhase = Object.freeze({
   READY: "ready",
@@ -33,10 +33,8 @@ export const UIEvent = Object.freeze({
 
 type UIPhaseValue = (typeof UIPhase)[keyof typeof UIPhase]
 type UIEventValue = (typeof UIEvent)[keyof typeof UIEvent]
-type SkillSummary = SkillsListResult["skills"][number]
 
 type ChatRuntimeStoreState = {
-  currentThreadId: string
   messages: ChatMessage[]
   visibleMessages: ChatMessage[]
   visibleStart: number
@@ -45,12 +43,9 @@ type ChatRuntimeStoreState = {
   uiPhase: UIPhaseValue
   isHydrated: boolean
   dispatchUIEvent: (event: UIEventValue) => boolean
-  initQueryBridge: () => Promise<void>
+  initBridge: () => void
   loadOlderMessages: () => void
-  sendMessage: (
-    text: string,
-    _options?: Record<string, unknown>
-  ) => Promise<void>
+  sendMessage: (text: string) => void
   startDictationPhase: () => void
   startTranscribingPhase: () => void
   finishTranscribingPhase: (input?: { success?: boolean }) => void
@@ -81,77 +76,51 @@ const UI_TRANSITIONS: Record<
   },
 })
 
-function nextUIPhase(
-  from: UIPhaseValue,
-  event: UIEventValue
-): UIPhaseValue | null {
+function nextUIPhase(from: UIPhaseValue, event: UIEventValue): UIPhaseValue | null {
   return UI_TRANSITIONS[from]?.[event] || null
 }
 
 function nextId(): string {
-  msgCounter += 1
-  return `msg_${msgCounter}`
+  return `msg_${++msgCounter}`
 }
 
-function makeThreadId(): string {
-  return globalThis.crypto?.randomUUID?.() || "thread_default"
-}
-
-function reseedCounter(messages: ChatMessage[]): void {
-  let max = msgCounter
-  for (const msg of messages) {
-    const match = /^msg_(\d+)$/.exec(String(msg?.id || ""))
-    if (match) {
-      const n = Number(match[1])
-      if (Number.isFinite(n)) max = Math.max(max, n)
-    }
-  }
-  msgCounter = max
-}
-
-function appendMessage(
+function appendMsg(
   messages: ChatMessage[],
-  role: "assistant" | "system",
+  role: "user" | "assistant" | "system",
   text: string
 ): ChatMessage[] {
   const content = String(text || "").trim()
   if (!content) return messages
-  return [
-    ...messages,
-    { id: nextId(), role, content: [{ type: "text", text: content }] },
-  ]
+  return [...messages, { id: nextId(), role, content: [{ type: "text", text: content }] }]
 }
 
 export const useChatRuntimeStore = create<ChatRuntimeStoreState>((set, get) => {
-  function updateAllMessages(
+  function updateMessages(
     updater: (messages: ChatMessage[]) => ChatMessage[],
-    { keepWindow = false }: { keepWindow?: boolean } = {}
+    keepWindow = false
   ) {
     set((state) => {
-      const nextMessages = updater(state.messages)
-      const windowState = keepWindow
-        ? getWindowSlice(nextMessages, state.visibleStart)
-        : getLatestWindow(nextMessages)
-
+      const next = updater(state.messages)
+      const win = keepWindow
+        ? getWindowSlice(next, state.visibleStart)
+        : getLatestWindow(next)
       return {
-        messages: nextMessages,
-        visibleMessages: windowState.visibleMessages,
-        visibleStart: windowState.visibleStart,
-        hasOlderMessages: windowState.hasOlderMessages,
+        messages: next,
+        visibleMessages: win.visibleMessages,
+        visibleStart: win.visibleStart,
+        hasOlderMessages: win.hasOlderMessages,
       }
     })
   }
 
   function transitionUI(event: UIEventValue): boolean {
-    const from = get().uiPhase
-    const to = nextUIPhase(from, event)
+    const to = nextUIPhase(get().uiPhase, event)
     if (!to) return false
     set({ uiPhase: to })
     return true
   }
 
   return {
-    currentThreadId: "",
     messages: [],
     visibleMessages: [],
     visibleStart: 0,
@@ -162,138 +131,62 @@ export const useChatRuntimeStore = create<ChatRuntimeStoreState>((set, get) => {
 
     dispatchUIEvent: transitionUI,
 
-    initQueryBridge: async () => {
-      if (!querySubscribed) {
-        window.openmnk.query.onEvent((event: QueryEvent) => {
-          if (!event?.type) return
+    initBridge: () => {
+      if (subscribed) return
+      subscribed = true
 
-          if (event.type === "thought") {
-            updateAllMessages((msgs) =>
-              appendMessage(msgs, "system", event.text)
-            )
-            return
-          }
-
-          if (event.type === "command") {
-            const label = event.output
-              ? `${event.description}\n\`${event.cmd}\`\n→ ${event.output.slice(0, 200)}`
-              : `${event.description}: \`${event.cmd}\``
-            updateAllMessages((msgs) =>
-              appendMessage(msgs, "system", label)
-            )
-            return
-          }
-
-          if (event.type === "response") {
-            updateAllMessages((msgs) =>
-              appendMessage(msgs, "assistant", event.text)
-            )
-            return
-          }
-
-          if (event.type === "error") {
-            updateAllMessages((msgs) =>
-              appendMessage(msgs, "system", `Error: ${event.message}`)
-            )
-            transitionUI(UIEvent.REQUEST_ERROR)
-            return
-          }
-
-          if (event.type === "done") {
-            transitionUI(UIEvent.REQUEST_DONE)
-          }
-        })
-        querySubscribed = true
-      }
-
-      const init = await window.openmnk.query.init()
-      const messages = init.success ? init.messages : []
-      const windowState = getLatestWindow(messages)
-      reseedCounter(messages)
-
-      set({
-        currentThreadId: get().currentThreadId || makeThreadId(),
-        messages,
-        visibleMessages: windowState.visibleMessages,
-        visibleStart: windowState.visibleStart,
-        hasOlderMessages: windowState.hasOlderMessages,
-        uiPhase: UIPhase.READY,
-        isHydrated: true,
+      // Subscribe to session events
+      window.openmnk.session.onEvent((event: SessionEvent) => {
+        if (event.type === "thought") {
+          updateMessages((msgs) => appendMsg(msgs, "system", event.text))
+        }
+        if (event.type === "command") {
+          const label = event.output
+            ? `${event.description}\n\`${event.cmd}\`\n→ ${event.output.slice(0, 200)}`
+            : `${event.description}: \`${event.cmd}\``
+          updateMessages((msgs) => appendMsg(msgs, "system", label))
+        }
+        if (event.type === "response") {
+          updateMessages((msgs) => appendMsg(msgs, "assistant", event.text))
+        }
+        if (event.type === "error") {
+          updateMessages((msgs) => appendMsg(msgs, "system", `Error: ${event.message}`))
+          transitionUI(UIEvent.REQUEST_ERROR)
+        }
+        if (event.type === "done") {
+          transitionUI(UIEvent.REQUEST_DONE)
+        }
       })
+
+      window.openmnk.ready()
+      set({ isHydrated: true })
     },
 
     loadOlderMessages: () => {
       set((state) => {
         if (!state.hasOlderMessages) return {}
-        const windowState = loadOlderWindow(state.messages, state.visibleStart)
+        const win = loadOlderWindow(state.messages, state.visibleStart)
         return {
-          visibleMessages: windowState.visibleMessages,
-          visibleStart: windowState.visibleStart,
-          hasOlderMessages: windowState.hasOlderMessages,
+          visibleMessages: win.visibleMessages,
+          visibleStart: win.visibleStart,
+          hasOlderMessages: win.hasOlderMessages,
         }
       })
     },
 
-    sendMessage: async (text, _options = {}) => {
-      const query = String(text || "").trim()
-      if (!query) return
+    sendMessage: (text: string) => {
+      const trimmed = String(text || "").trim()
+      if (!trimmed) return
       if (!transitionUI(UIEvent.SUBMIT_TEXT)) return
 
-      const currentThreadId = get().currentThreadId || makeThreadId()
-      if (!get().currentThreadId) {
-        set({ currentThreadId })
-      }
-
-      updateAllMessages((messages) => [
-        ...messages,
-        {
-          id: nextId(),
-          role: "user",
-          content: [{ type: "text", text: query }],
-        },
-      ])
-
-      try {
-        const result = await window.openmnk.query.start({
-          query,
-          threadId: currentThreadId,
-        })
-
-        if (!result.success) {
-          const errorText =
-            "error" in result ? result.error : "Failed to start query"
-          updateAllMessages((messages) =>
-            appendMessage(messages, "system", String(errorText))
-          )
-          transitionUI(UIEvent.REQUEST_ERROR)
-        }
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : String(error || "Unknown error")
-
-        updateAllMessages((messages) =>
-          appendMessage(messages, "system", `Error: ${message}`)
-        )
-        transitionUI(UIEvent.REQUEST_ERROR)
-      }
+      updateMessages((msgs) => appendMsg(msgs, "user", trimmed))
+      window.openmnk.session.send({ type: "start", text: trimmed })
     },
 
-    startDictationPhase: () => {
-      transitionUI(UIEvent.START_DICTATION)
-    },
-
-    startTranscribingPhase: () => {
-      transitionUI(UIEvent.STOP_DICTATION)
-    },
-
-    finishTranscribingPhase: ({ success = true } = {}) => {
-      transitionUI(success ? UIEvent.TRANSCRIBE_DONE : UIEvent.TRANSCRIBE_ERROR)
-    },
-
-    cancelUIPhase: () => {
-      transitionUI(UIEvent.CANCEL)
-    },
+    startDictationPhase: () => transitionUI(UIEvent.START_DICTATION),
+    startTranscribingPhase: () => transitionUI(UIEvent.STOP_DICTATION),
+    finishTranscribingPhase: ({ success = true } = {}) =>
+      transitionUI(success ? UIEvent.TRANSCRIBE_DONE : UIEvent.TRANSCRIBE_ERROR),
+    cancelUIPhase: () => transitionUI(UIEvent.CANCEL),
   }
 })

@@ -1,5 +1,28 @@
 export type Unsubscribe = () => void
 
+// --- Session events (bidirectional on "session" channel) ---
+
+// Main → Renderer
+export type SessionEvent =
+  | { type: "thought"; sessionId: string; text: string }
+  | {
+      type: "command"
+      sessionId: string
+      description: string
+      cmd: string
+      output?: string
+    }
+  | { type: "response"; sessionId: string; text: string }
+  | { type: "done"; sessionId: string }
+  | { type: "error"; sessionId: string; message: string }
+
+// Renderer → Main
+export type SessionCommand =
+  | { type: "start"; text: string; skill?: string }
+  | { type: "cancel" }
+
+// --- Chat messages (renderer display model) ---
+
 export type ChatMessagePart =
   | { type: "text"; text: string }
   | { type: "image"; image: string }
@@ -10,28 +33,7 @@ export type ChatMessage = {
   content: ChatMessagePart[]
 }
 
-export type QueryEvent =
-  | { type: "thought"; queryId: string; text: string }
-  | {
-      type: "command"
-      queryId: string
-      description: string
-      cmd: string
-      output?: string
-    }
-  | { type: "response"; queryId: string; text: string }
-  | { type: "done"; queryId: string }
-  | { type: "error"; queryId?: string; message: string }
-
-export type QueryInitResult =
-  | { success: true; messages: ChatMessage[] }
-  | { success: false; error: string }
-
-export type QueryStartResult =
-  | { success: true; queryId: string }
-  | { success: false; error: string }
-
-export type BasicResult = { success: true } | { success: false; error: string }
+// --- Dictation ---
 
 export type DictationCommand = { type: "start" } | { type: "stop" }
 
@@ -44,32 +46,27 @@ export type DictationTranscribeResult =
   | { success: true; text: string }
   | { success: false; error: string }
 
-export type SkillsListResult = {
-  success: true
-  skills: Array<{
-    id: string
-    title: string
-    search_text?: string
-  }>
+// --- Skills ---
+
+export type SkillSummary = {
+  id: string
+  name: string
+  description: string
 }
 
+// --- Bridge API exposed to renderer ---
+
 export type OpenmnkApi = {
-  query: {
-    init: () => Promise<QueryInitResult>
-    start: (input: {
-      query: string
-      threadId?: string | null
-    }) => Promise<QueryStartResult>
-    cancel: () => Promise<BasicResult>
-    onEvent: (listener: (event: QueryEvent) => void) => Unsubscribe
+  ready: () => void
+  session: {
+    send: (command: SessionCommand) => void
+    onEvent: (listener: (event: SessionEvent) => void) => Unsubscribe
   }
   dictation: {
-    transcribe: (
-      input: DictationTranscribeInput
-    ) => Promise<DictationTranscribeResult>
+    transcribe: (input: DictationTranscribeInput) => Promise<DictationTranscribeResult>
     onCommand: (listener: (command: DictationCommand) => void) => Unsubscribe
   }
   skills: {
-    list: () => Promise<SkillsListResult>
+    list: () => Promise<SkillSummary[]>
   }
 }

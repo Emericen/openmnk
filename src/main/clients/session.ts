@@ -1,6 +1,6 @@
 import { execSync } from "child_process"
 import OpenAI from "openai"
-import type { QueryEmit, QueryRunner } from "./types"
+import type { SessionEmit } from "./types"
 
 // --- Config ---
 
@@ -90,17 +90,19 @@ function formatError(error: unknown): string {
   return String(error)
 }
 
-export class QueryClient implements QueryRunner {
-  private emit: QueryEmit
+// --- Session ---
+
+export class Session {
+  private emit: SessionEmit
   private openai: OpenAI
   private messages: Message[] = []
   private abortController: AbortController | null = null
-  private running = false
+  running = false
 
-  constructor(emit: QueryEmit) {
+  constructor(emit: SessionEmit) {
     this.emit = emit
     if (!LLM_BASE_URL || !LLM_API_KEY) {
-      console.warn("[query] LLM_BASE_URL or LLM_API_KEY not set.")
+      console.warn("[session] LLM_BASE_URL or LLM_API_KEY not set.")
     }
     this.openai = new OpenAI({
       baseURL: LLM_BASE_URL || "https://api.openai.com/v1",
@@ -108,26 +110,22 @@ export class QueryClient implements QueryRunner {
     })
   }
 
-  async start(queryId: string, query: string): Promise<void> {
+  async start(sessionId: string, text: string): Promise<void> {
     if (this.running) return
     this.running = true
     this.abortController = new AbortController()
 
-    this.messages.push({ role: "user", content: query.trim() })
+    this.messages.push({ role: "user", content: text.trim() })
 
     try {
-      await this.loop(queryId)
+      await this.loop(sessionId)
     } catch (error) {
       if (this.abortController?.signal.aborted) return
-      this.emit({
-        type: "error",
-        queryId,
-        message: formatError(error),
-      })
+      this.emit({ type: "error", sessionId, message: formatError(error) })
     } finally {
       this.running = false
       this.abortController = null
-      this.emit({ type: "done", queryId })
+      this.emit({ type: "done", sessionId })
     }
   }
 
@@ -141,7 +139,7 @@ export class QueryClient implements QueryRunner {
     this.messages = []
   }
 
-  private async loop(queryId: string): Promise<void> {
+  private async loop(sessionId: string): Promise<void> {
     for (let step = 0; step < MAX_STEPS; step++) {
       if (this.abortController?.signal.aborted) return
 
@@ -151,9 +149,8 @@ export class QueryClient implements QueryRunner {
         ...this.messages,
       ]
 
-      // Log context (truncate base64 for readability)
       console.log(
-        "[query] LLM call, messages:",
+        "[session] LLM call, messages:",
         truncateBase64(JSON.stringify(fullMessages, null, 2)).slice(0, 2000)
       )
 
@@ -176,30 +173,17 @@ export class QueryClient implements QueryRunner {
       const text = msg.content || ""
       const toolCalls = (msg.tool_calls || []) as ToolCall[]
 
-      // Add assistant message to context
-      const assistantMsg: Message = {
-        role: "assistant",
-        content: text || null,
-      }
-      if (toolCalls.length > 0) {
-        assistantMsg.tool_calls = toolCalls
-      }
+      const assistantMsg: Message = { role: "assistant", content: text || null }
+      if (toolCalls.length > 0) assistantMsg.tool_calls = toolCalls
       this.messages.push(assistantMsg)
 
       if (toolCalls.length === 0) {
-        // Final text response
-        if (text) {
-          this.emit({ type: "response", queryId, text })
-        }
+        if (text) this.emit({ type: "response", sessionId, text })
         return
       }
 
-      // Emit thinking text if present alongside tool calls
-      if (text) {
-        this.emit({ type: "thought", queryId, text })
-      }
+      if (text) this.emit({ type: "thought", sessionId, text })
 
-      // Execute each tool call
       for (const tc of toolCalls) {
         if (this.abortController?.signal.aborted) return
 
@@ -213,7 +197,7 @@ export class QueryClient implements QueryRunner {
         const description = String(args.description || "Running command")
         const cmd = String(args.cmd || "")
 
-        this.emit({ type: "command", queryId, description, cmd })
+        this.emit({ type: "command", sessionId, description, cmd })
 
         let output: string
         try {
@@ -227,21 +211,19 @@ export class QueryClient implements QueryRunner {
           output = `Error: ${execErr.stderr || execErr.message || "Command failed"}`
         }
 
-        // Emit command with output
-        this.emit({ type: "command", queryId, description, cmd, output })
+        this.emit({ type: "command", sessionId, description, cmd, output })
 
         this.messages.push({
           role: "tool",
           tool_call_id: tc.id,
-          content: output.slice(0, 10000), // cap tool output
+          content: output.slice(0, 10000),
         })
       }
     }
 
-    // Reached max steps
     this.emit({
       type: "response",
-      queryId,
+      sessionId,
       text: "Reached maximum steps. Stopping.",
     })
   }
