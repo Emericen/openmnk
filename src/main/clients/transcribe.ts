@@ -1,5 +1,5 @@
 import OpenAI from "openai"
-import type { DictationTranscribeInput } from "../../shared/ipc-contract"
+import type { DictationTranscribeResult } from "../../shared/ipc-contract"
 
 let client: OpenAI | null = null
 
@@ -12,29 +12,28 @@ function getClient(): OpenAI | null {
   return client
 }
 
-export function isTranscriptionConfigured() {
-  const baseURL = process.env.TRANSCRIBE_BASE_URL || process.env.LLM_BASE_URL
-  const apiKey = process.env.TRANSCRIBE_API_KEY || process.env.LLM_API_KEY
-  return Boolean(baseURL && apiKey)
-}
-
-export async function transcribeAudio({
-  audio,
-  filename,
-}: DictationTranscribeInput): Promise<{ text: string }> {
+export async function transcribe(input: {
+  audio?: string
+  filename?: string
+}): Promise<DictationTranscribeResult> {
   const openai = getClient()
   if (!openai) {
-    throw new Error(
-      "Transcription not configured. Set TRANSCRIBE_BASE_URL and TRANSCRIBE_API_KEY in .env"
-    )
+    return { success: false, error: "Voice transcription not configured." }
   }
 
-  const model = process.env.TRANSCRIBE_MODEL || "whisper-1"
-  const buffer = Buffer.from(audio, "base64")
-  const file = new File([buffer], filename || "recording.webm", {
-    type: "audio/webm",
-  })
+  try {
+    const model = process.env.TRANSCRIBE_MODEL || "whisper-1"
+    const buffer = Buffer.from(String(input.audio || ""), "base64")
+    const file = new File([buffer], input.filename || "recording.webm", {
+      type: "audio/webm",
+    })
 
-  const result = await openai.audio.transcriptions.create({ model, file })
-  return { text: result.text || "" }
+    const result = await openai.audio.transcriptions.create({ model, file })
+    return { success: true, text: result.text || "" }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
 }

@@ -8,3 +8,5 @@ Thumbs.db
 *.mov
 *.mp4
 .claude/
+experiments/
+test/screenshots/

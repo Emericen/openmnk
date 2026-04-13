@@ -1,49 +1,38 @@
-import { execSync } from "child_process"
 import OpenAI from "openai"
-import type { SessionEmit } from "./types"
-
-// --- Config ---
+import { run as runCommand } from "./terminal"
+import { load as loadNotion } from "./notion"
+import type { SessionEmit, Message, ToolCall } from "./types"
 
 const LLM_BASE_URL = process.env.LLM_BASE_URL || ""
 const LLM_API_KEY = process.env.LLM_API_KEY || ""
-const LLM_MODEL = process.env.LLM_MODEL || "gpt-4.1-mini"
+const LLM_MODEL = process.env.LLM_MODEL || ""
 const LLM_TEMPERATURE = parseFloat(process.env.LLM_TEMPERATURE || "0.0")
 const LLM_MAX_TOKENS = parseInt(process.env.LLM_MAX_TOKENS || "2048", 10)
-const MAX_STEPS = parseInt(process.env.MAX_STEPS || "100", 10)
 
-const SYSTEM_MESSAGE = `You are a pragmatic desktop assistant that controls the user's computer via shell commands.
-
-You have one tool: run_command. Use it to execute any shell command. For GUI automation on macOS, use osascript/JXA. For screenshots, use screencapture. For file operations, use standard shell commands.
-
-Rules:
+const DEFAULT_SYSTEM_MESSAGE = `You are a pragmatic desktop assistant that controls the user's computer via shell commands.Rules:
 - Between tool calls, keep text to one short plain-text sentence. No markdown.
-- All markdown and detailed responses go in your final message only.
-- Always check the screen state before acting when the user refers to something visual.
-- If a command fails, try a different approach.
-- Use run_command for everything: file ops, app control, screenshots, mouse/keyboard via osascript.`
+- All markdown and detailed responses go in your final message only.`
 
-function getPlatformHint(): string {
-  if (process.platform === "darwin") {
-    return "\nThe user is on macOS. Use osascript for GUI automation. Use 'cmd' for Mac shortcuts."
+async function buildSystemMessage(skill?: string): Promise<string> {
+  const notion = await loadNotion()
+  let system = notion.system || DEFAULT_SYSTEM_MESSAGE
+
+  if (skill) {
+    const match = notion.skills.find(
+      (s) => s.title.toLowerCase().replace(/\s+/g, "-") === skill
+    )
+    if (match) system += `\n\n${match.content}`
   }
-  if (process.platform === "win32") {
-    return "\nThe user is on Windows. Use PowerShell for automation. Use 'ctrl' for shortcuts."
-  }
-  if (process.platform === "linux") {
-    return "\nThe user is on Linux. Use xdotool for GUI automation. Use 'ctrl' for shortcuts."
-  }
-  return ""
+
+  return system
 }
-
-// --- Tool definition ---
 
 const TOOLS = [
   {
     type: "function" as const,
     function: {
-      name: "run_command",
-      description:
-        "Execute a shell command. Use for file operations, running scripts, osascript/JXA for GUI control, screenshots via screencapture, etc.",
+      name: "execSync",
+      description: `Node's built-in 'run a shell command and wait.' It spawns a new shell process for every call, runs the command, blocks until done, returns stdout as a string. No persistent session, no state between calls. cd /tmp in one call doesn't affect the next call. Note user's operating system is ${process.platform}.`,
       parameters: {
         type: "object",
         properties: {
@@ -62,27 +51,6 @@ const TOOLS = [
   },
 ]
 
-// --- Helpers ---
-
-type Message =
-  | { role: "system"; content: string }
-  | { role: "user"; content: string }
-  | { role: "assistant"; content: string | null; tool_calls?: ToolCall[] }
-  | { role: "tool"; tool_call_id: string; content: string }
-
-type ToolCall = {
-  id: string
-  type: "function"
-  function: { name: string; arguments: string }
-}
-
-function truncateBase64(text: string): string {
-  return text.replace(
-    /data:[^;]+;base64,[A-Za-z0-9+/=]{100,}/g,
-    "[base64 truncated]"
-  )
-}
-
 function formatError(error: unknown): string {
   if (!error) return "Unknown error"
   if (typeof error === "string") return error
@@ -90,13 +58,12 @@ function formatError(error: unknown): string {
   return String(error)
 }
 
-// --- Session ---
-
 export class Session {
   private emit: SessionEmit
   private openai: OpenAI
   private messages: Message[] = []
   private abortController: AbortController | null = null
+  private skill?: string
   running = false
 
   constructor(emit: SessionEmit) {
@@ -110,10 +77,11 @@ export class Session {
     })
   }
 
-  async start(sessionId: string, text: string): Promise<void> {
+  async start(sessionId: string, text: string, skill?: string): Promise<void> {
     if (this.running) return
     this.running = true
     this.abortController = new AbortController()
+    this.skill = skill
 
     this.messages.push({ role: "user", content: text.trim() })
 
@@ -134,25 +102,17 @@ export class Session {
     this.running = false
   }
 
-  clear(): void {
-    if (this.running) return
-    this.messages = []
-  }
-
   private async loop(sessionId: string): Promise<void> {
-    for (let step = 0; step < MAX_STEPS; step++) {
+    while (true) {
       if (this.abortController?.signal.aborted) return
 
-      const systemMessage = SYSTEM_MESSAGE + getPlatformHint()
+      this.emit({ type: "thought", sessionId, text: "Thinking..." })
+
+      const systemMessage = await buildSystemMessage(this.skill)
       const fullMessages: Message[] = [
         { role: "system", content: systemMessage },
         ...this.messages,
       ]
-
-      console.log(
-        "[session] LLM call, messages:",
-        truncateBase64(JSON.stringify(fullMessages, null, 2)).slice(0, 2000)
-      )
 
       const response = await this.openai.chat.completions.create(
         {
@@ -186,7 +146,6 @@ export class Session {
 
       for (const tc of toolCalls) {
         if (this.abortController?.signal.aborted) return
-
         let args: { description?: string; cmd?: string }
         try {
           args = JSON.parse(tc.function.arguments)
@@ -197,20 +156,12 @@ export class Session {
         const description = String(args.description || "Running command")
         const cmd = String(args.cmd || "")
 
+        // Emit before execution (no output yet — shows loading in UI)
         this.emit({ type: "command", sessionId, description, cmd })
 
-        let output: string
-        try {
-          output = execSync(cmd, {
-            encoding: "utf-8",
-            timeout: 30000,
-            maxBuffer: 1024 * 1024,
-          })
-        } catch (err) {
-          const execErr = err as { stderr?: string; message?: string }
-          output = `Error: ${execErr.stderr || execErr.message || "Command failed"}`
-        }
+        const output = await runCommand(cmd, this.abortController?.signal)
 
+        // Emit after execution (with output — updates the UI)
         this.emit({ type: "command", sessionId, description, cmd, output })
 
         this.messages.push({
@@ -220,11 +171,5 @@ export class Session {
         })
       }
     }
-
-    this.emit({
-      type: "response",
-      sessionId,
-      text: "Reached maximum steps. Stopping.",
-    })
   }
 }

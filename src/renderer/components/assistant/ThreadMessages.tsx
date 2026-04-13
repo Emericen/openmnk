@@ -1,11 +1,12 @@
 import { useMemo, type ReactNode } from "react"
 import { MessagePrimitive, useMessage } from "@assistant-ui/react"
+import { Loader2 } from "lucide-react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import { useChatRuntimeStore } from "@/store/chatRuntimeStore"
+import type { ChatMessagePart } from "../../../shared/ipc-contract"
 
 type MarkdownProps = { children?: ReactNode }
 type MarkdownLinkProps = { href?: string; children?: ReactNode }
-type SystemStatusTextPartProps = { text: string; isInterrupt: boolean }
 
 const markdownComponents: Components = {
   p: ({ children }: MarkdownProps) => (
@@ -86,13 +87,6 @@ export function AssistantMessage() {
                 {text}
               </ReactMarkdown>
             ),
-            Image: ({ image }) => (
-              <img
-                src={image}
-                alt="Desktop screenshot"
-                className="rounded-lg w-full h-auto shadow-lg"
-              />
-            ),
           }}
         />
       </div>
@@ -100,23 +94,22 @@ export function AssistantMessage() {
   )
 }
 
-function SystemStatusTextPart({
-  text,
-  isInterrupt,
-}: SystemStatusTextPartProps) {
+function CommandPart({ part }: { part: Extract<ChatMessagePart, { type: "command" }> }) {
   return (
-    <p
-      className={`m-0 text-sm leading-5 ${
-        isInterrupt ? "text-red-400" : "text-muted-foreground"
-      }`}
-    >
-      {String(text || "")}
-    </p>
+    <details>
+      <summary className="m-0 text-sm leading-5 cursor-pointer text-muted-foreground hover:text-foreground/80 marker:text-muted-foreground/50">
+        {part.description}
+      </summary>
+      <pre className="mt-1 text-[11px] font-mono whitespace-pre-wrap break-words text-muted-foreground/70 bg-muted/40 rounded px-2 py-1.5 max-h-40 overflow-y-auto">
+        {`$ ${part.cmd}`}{part.output !== undefined ? `\n\n${part.output}` : ""}
+      </pre>
+    </details>
   )
 }
 
 export function SystemMessage() {
   const visibleMessages = useChatRuntimeStore((s) => s.visibleMessages)
+  const uiPhase = useChatRuntimeStore((s) => s.uiPhase)
   const messageIndex = useMessage((s) => s.index)
 
   const lastProgressIndex = useMemo(() => {
@@ -128,48 +121,53 @@ export function SystemMessage() {
   }, [visibleMessages])
 
   const isLastProgress = messageIndex === lastProgressIndex
-  const textContent = useMemo(() => {
-    const message = visibleMessages[messageIndex]
-    const parts = Array.isArray(message?.content) ? message.content : []
-    return parts
-      .filter((part) => part?.type === "text")
-      .map((part) => String(part.text || ""))
-      .join(" ")
-      .trim()
-  }, [visibleMessages, messageIndex])
+  const isRunning = uiPhase === "submitting"
+  const message = visibleMessages[messageIndex]
+  const parts = Array.isArray(message?.content) ? message.content : []
 
-  const isInterruptMessage = /interrupted|unavailable|provider.*error/i.test(
-    textContent
+  // Is this message currently loading? (command without output, or "Thinking...")
+  const isLoadingMessage = parts.some(
+    (p) => (p.type === "command" && p.output === undefined) ||
+           (p.type === "text" && p.text === "Thinking...")
   )
+
+  // Show spinner dot if this is the last system message and it's loading
+  const showSpinner = isLastProgress && isRunning && isLoadingMessage
 
   return (
     <MessagePrimitive.Root className="w-full px-6 py-0">
       <div className="max-w-[90%] grid grid-cols-[16px_1fr] gap-3">
         <div className="relative flex justify-center">
-          <div className="absolute top-0 h-2.5 w-px bg-muted-foreground/30" />
+          <div className="absolute top-0 h-1.5 w-px bg-muted-foreground/30" />
           {!isLastProgress ? (
-            <div className="absolute top-2.5 bottom-0 w-px bg-muted-foreground/30" />
+            <div className="absolute top-5 bottom-0 w-px bg-muted-foreground/30" />
           ) : null}
-          <div className="relative mt-1.5 h-2.5 w-2.5 rounded-full border border-muted-foreground/65 bg-background" />
+          {showSpinner ? (
+            <Loader2 className="relative mt-2 h-3 w-3 animate-spin text-muted-foreground/65" />
+          ) : (
+            <div className="relative mt-2 h-2.5 w-2.5 rounded-full border border-muted-foreground/65 bg-background" />
+          )}
         </div>
         <div className="pb-1.5 pt-1">
-          <MessagePrimitive.Parts
-            components={{
-              Text: ({ text }) => (
-                <SystemStatusTextPart
-                  text={text}
-                  isInterrupt={isInterruptMessage}
-                />
-              ),
-              Image: ({ image }) => (
-                <img
-                  src={image}
-                  alt="Desktop screenshot"
-                  className="rounded-lg w-full h-auto shadow-lg"
-                />
-              ),
-            }}
-          />
+          {parts.map((part, i) => {
+            if (part.type === "command") {
+              return <CommandPart key={i} part={part} />
+            }
+            if (part.type === "text") {
+              const isInterrupt = /interrupted|unavailable|error/i.test(part.text)
+              return (
+                <p
+                  key={i}
+                  className={`m-0 text-sm leading-5 ${
+                    isInterrupt ? "text-red-400" : "text-muted-foreground"
+                  }`}
+                >
+                  {part.text}
+                </p>
+              )
+            }
+            return null
+          })}
         </div>
       </div>
     </MessagePrimitive.Root>

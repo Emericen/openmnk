@@ -1,4 +1,10 @@
-export type Unsubscribe = () => void
+// --- Bridge (generic IPC) ---
+
+export type Bridge = {
+  send: (channel: string, payload?: unknown) => void
+  on: (channel: string, callback: (payload: unknown) => void) => () => void
+  invoke: (channel: string, payload?: unknown) => Promise<unknown>
+}
 
 // --- Session events (bidirectional on "session" channel) ---
 
@@ -25,7 +31,7 @@ export type SessionCommand =
 
 export type ChatMessagePart =
   | { type: "text"; text: string }
-  | { type: "image"; image: string }
+  | { type: "command"; description: string; cmd: string; output?: string }
 
 export type ChatMessage = {
   id: string
@@ -52,21 +58,4 @@ export type SkillSummary = {
   id: string
   name: string
   description: string
-}
-
-// --- Bridge API exposed to renderer ---
-
-export type OpenmnkApi = {
-  ready: () => void
-  session: {
-    send: (command: SessionCommand) => void
-    onEvent: (listener: (event: SessionEvent) => void) => Unsubscribe
-  }
-  dictation: {
-    transcribe: (input: DictationTranscribeInput) => Promise<DictationTranscribeResult>
-    onCommand: (listener: (command: DictationCommand) => void) => Unsubscribe
-  }
-  skills: {
-    list: () => Promise<SkillSummary[]>
-  }
 }

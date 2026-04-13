@@ -1,17 +1,10 @@
 import { create } from "zustand"
-import type {
-  ChatMessage,
-  SessionEvent,
-  SkillSummary,
-} from "../../shared/ipc-contract"
-import {
-  getLatestWindow,
-  getWindowSlice,
-  loadOlderWindow,
-} from "./chatWindowing"
+import type { ChatMessage, SessionEvent, SkillSummary } from "../../shared/ipc-contract"
+import { getLatestWindow, getWindowSlice, loadOlderWindow } from "./chatWindowing"
 
 let msgCounter = 0
 let subscribed = false
+let stopRequested = false
 
 export const UIPhase = Object.freeze({
   READY: "ready",
@@ -46,6 +39,7 @@ type ChatRuntimeStoreState = {
   initBridge: () => void
   loadOlderMessages: () => void
   sendMessage: (text: string) => void
+  stop: () => void
   startDictationPhase: () => void
   startTranscribingPhase: () => void
   finishTranscribingPhase: (input?: { success?: boolean }) => void
@@ -135,30 +129,85 @@ export const useChatRuntimeStore = create<ChatRuntimeStoreState>((set, get) => {
       if (subscribed) return
       subscribed = true
 
-      // Subscribe to session events
-      window.openmnk.session.onEvent((event: SessionEvent) => {
+      window.bridge.on("session", (raw) => {
+        const event = raw as SessionEvent
+
+        // Remove "Thinking..." placeholder before adding new content
+        const removeThinking = (msgs: ChatMessage[]) => {
+          const last = msgs[msgs.length - 1]
+          if (last?.role === "system" && last.content[0]?.type === "text" && last.content[0].text === "Thinking...") {
+            return msgs.slice(0, -1)
+          }
+          return msgs
+        }
+
         if (event.type === "thought") {
-          updateMessages((msgs) => appendMsg(msgs, "system", event.text))
+          updateMessages((msgs) => appendMsg(removeThinking(msgs), "system", event.text))
         }
         if (event.type === "command") {
-          const label = event.output
-            ? `${event.description}\n\`${event.cmd}\`\n→ ${event.output.slice(0, 200)}`
-            : `${event.description}: \`${event.cmd}\``
-          updateMessages((msgs) => appendMsg(msgs, "system", label))
+          updateMessages((msgs) => {
+            const cleaned = removeThinking(msgs)
+            // If output is present, update the last matching command message
+            if (event.output !== undefined) {
+              for (let i = cleaned.length - 1; i >= 0; i--) {
+                const part = cleaned[i]?.content[0]
+                if (
+                  part?.type === "command" &&
+                  part.cmd === event.cmd &&
+                  part.output === undefined
+                ) {
+                  const updated = [...cleaned]
+                  updated[i] = {
+                    ...cleaned[i],
+                    content: [{
+                      type: "command" as const,
+                      description: event.description,
+                      cmd: event.cmd,
+                      output: event.output,
+                    }],
+                  }
+                  return updated
+                }
+              }
+            }
+            // No output yet (loading) or no match found — create new
+            return [
+              ...cleaned,
+              {
+                id: nextId(),
+                role: "system" as const,
+                content: [{
+                  type: "command" as const,
+                  description: event.description,
+                  cmd: event.cmd,
+                  output: event.output,
+                }],
+              },
+            ]
+          })
         }
         if (event.type === "response") {
-          updateMessages((msgs) => appendMsg(msgs, "assistant", event.text))
+          updateMessages((msgs) => appendMsg(removeThinking(msgs), "assistant", event.text))
         }
         if (event.type === "error") {
-          updateMessages((msgs) => appendMsg(msgs, "system", `Error: ${event.message}`))
+          updateMessages((msgs) => appendMsg(removeThinking(msgs), "system", `Error: ${event.message}`))
           transitionUI(UIEvent.REQUEST_ERROR)
         }
         if (event.type === "done") {
-          transitionUI(UIEvent.REQUEST_DONE)
+          if (stopRequested) {
+            stopRequested = false
+            updateMessages((msgs) =>
+              appendMsg(removeThinking(msgs), "system", "Conversation interrupted.")
+            )
+            transitionUI(UIEvent.CANCEL)
+          } else {
+            updateMessages(removeThinking)
+            transitionUI(UIEvent.REQUEST_DONE)
+          }
         }
       })
 
-      window.openmnk.ready()
+      window.bridge.send("ready")
       set({ isHydrated: true })
     },
 
@@ -180,7 +229,25 @@ export const useChatRuntimeStore = create<ChatRuntimeStoreState>((set, get) => {
       if (!transitionUI(UIEvent.SUBMIT_TEXT)) return
 
       updateMessages((msgs) => appendMsg(msgs, "user", trimmed))
-      window.openmnk.session.send({ type: "start", text: trimmed })
+
+      // Detect /skill-name pattern
+      const skillMatch = /^\/(\S+)(.*)$/.exec(trimmed)
+      if (skillMatch) {
+        const skill = skillMatch[1]
+        const rest = (skillMatch[2] || "").trim()
+        window.bridge.send("session", {
+          type: "start",
+          text: rest || `Run the ${skill} skill`,
+          skill,
+        })
+      } else {
+        window.bridge.send("session", { type: "start", text: trimmed })
+      }
+    },
+
+    stop: () => {
+      stopRequested = true
+      window.bridge.send("session", { type: "cancel" })
     },
 
     startDictationPhase: () => transitionUI(UIEvent.START_DICTATION),

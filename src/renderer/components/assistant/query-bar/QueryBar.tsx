@@ -1,5 +1,5 @@
 import { ComposerPrimitive } from "@assistant-ui/react"
-import { Loader2, Mic, MicOff, Send } from "lucide-react"
+import { Loader2, Mic, MicOff, Pause, Send } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -21,6 +21,7 @@ export function QueryBar() {
   const uiPhase = useChatRuntimeStore((s) => s.uiPhase)
   const skills = useChatRuntimeStore((s) => s.skills)
   const sendMessage = useChatRuntimeStore((s) => s.sendMessage)
+  const stop = useChatRuntimeStore((s) => s.stop)
   const lastPhaseRef = useRef<UIPhaseValue>(UIPhase.READY)
   const [inputText, setInputText] = useState("")
 
@@ -193,18 +194,35 @@ export function QueryBar() {
                   <TooltipContent>{dictationTooltipText}</TooltipContent>
                 </Tooltip>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <ComposerPrimitive.Send
-                      disabled={inputDisabled}
-                      className="inline-flex items-center justify-center h-7 w-7 p-0 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50"
-                      style={{ WebkitAppRegion: "no-drag" }}
-                    >
-                      <Send className="h-3.5 w-3.5" />
-                    </ComposerPrimitive.Send>
-                  </TooltipTrigger>
-                  <TooltipContent>Submit (Enter)</TooltipContent>
-                </Tooltip>
+                {uiPhase === UIPhase.SUBMITTING ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 w-7 p-0 bg-primary hover:bg-primary/90 text-primary-foreground"
+                        style={{ WebkitAppRegion: "no-drag" }}
+                        onClick={stop}
+                      >
+                        <Pause className="h-3.5 w-3.5 fill-current" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Stop (Escape)</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <ComposerPrimitive.Send
+                        disabled={inputDisabled}
+                        className="inline-flex items-center justify-center h-7 w-7 p-0 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50"
+                        style={{ WebkitAppRegion: "no-drag" }}
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                      </ComposerPrimitive.Send>
+                    </TooltipTrigger>
+                    <TooltipContent>Submit (Enter)</TooltipContent>
+                  </Tooltip>
+                )}
               </div>
             </div>
 

@@ -1,12 +1,10 @@
 import { ThreadPrimitive } from "@assistant-ui/react"
-import { Loader2 } from "lucide-react"
 import { useRef } from "react"
-import { UIPhase, useChatRuntimeStore } from "@/store/chatRuntimeStore"
+import { useChatRuntimeStore } from "@/store/chatRuntimeStore"
 import { QueryBar } from "./query-bar/QueryBar"
 import { AssistantMessage, SystemMessage, UserMessage } from "./ThreadMessages"
 
 export default function Thread() {
-  const uiPhase = useChatRuntimeStore((s) => s.uiPhase)
   const hasOlderMessages = useChatRuntimeStore((s) => s.hasOlderMessages)
   const loadOlderMessages = useChatRuntimeStore((s) => s.loadOlderMessages)
   const viewportRef = useRef<HTMLDivElement | null>(null)
@@ -50,12 +48,7 @@ export default function Thread() {
           }}
         />
 
-        {uiPhase === UIPhase.SUBMITTING ? (
-          <div className="px-6 py-2 flex items-center gap-2 text-muted-foreground text-sm">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Thinking...</span>
-          </div>
-        ) : null}
+        {/* Loading spinner is now part of the timeline via SystemMessage */}
       </ThreadPrimitive.Viewport>
 
       <QueryBar />

@@ -8,8 +8,8 @@ import { createSystemTray, destroyTray, setTrayAppearance } from "./windows/tray
 import * as chat from "./windows/chat"
 import { createTriggerListener } from "./listener/trigger"
 import { Session } from "./clients/session"
-import { getSkillCatalog, getSkillContent } from "./clients/skills"
-import { transcribeAudio, isTranscriptionConfigured } from "./clients/transcribe"
+import { load as loadNotion } from "./clients/notion"
+import { transcribe } from "./clients/transcribe"
 import type { SessionCommand, SessionEvent } from "../shared/ipc-contract"
 
 type AppearanceMode = "light" | "dark" | "system"
@@ -51,50 +51,33 @@ app.whenReady().then(async () => {
 
   function emit(event: SessionEvent) {
     chat.send("session", event)
-    if (event.type === "done" || event.type === "error") {
-      session = null
-    }
   }
 
-  // Mark renderer ready (flushes pending events)
+  // --- IPC ---
+
   ipcMain.on("ready", () => chat.markReady())
 
-  // Session channel: bidirectional
+  // Create one session, reuse across turns to preserve conversation history
+  session = new Session(emit)
+
   ipcMain.on("session", (_event, command: SessionCommand) => {
     if (command.type === "start") {
-      if (session?.running) return
-      session = new Session(emit)
-      // TODO: if command.skill, load skill content and prepend to system message
-      void session.start(randomUUID(), command.text)
+      if (session!.running) return
+      void session!.start(randomUUID(), command.text, command.skill)
     }
     if (command.type === "cancel") {
-      session?.cancel()
-      session = null
+      session!.cancel()
     }
   })
 
-  // --- Request/response handlers ---
-
-  ipcMain.handle("dictation:transcribe", async (_event, payload = {}) => {
-    if (!isTranscriptionConfigured()) {
-      return { success: false, error: "Voice transcription not configured." }
-    }
-    try {
-      const result = await transcribeAudio({
-        audio: String(payload.audio || ""),
-        filename: payload.filename || "recording.webm",
-      })
-      return { success: true, text: String(result?.text || "") }
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : String(error) }
-    }
-  })
+  ipcMain.handle("transcribe", (_event, input) => transcribe(input))
 
   ipcMain.handle("skills:list", async () => {
-    return getSkillCatalog().map((s) => ({
-      id: s.name,
-      name: s.name,
-      description: s.description,
+    const notion = await loadNotion()
+    return notion.skills.map((s) => ({
+      id: s.title.toLowerCase().replace(/\s+/g, "-"),
+      name: s.title,
+      description: "",
     }))
   })
 
@@ -103,11 +86,11 @@ app.whenReady().then(async () => {
   const trigger = await createTriggerListener({
     onTriggerHoldStart: () => {
       if (session?.running || !chat.isVisible()) return
-      chat.send("dictation:command", { type: "start" })
+      chat.send("dictation", { type: "start" })
     },
     onTriggerHoldEnd: () => {
       if (session?.running || !chat.isVisible()) return
-      chat.send("dictation:command", { type: "stop" })
+      chat.send("dictation", { type: "stop" })
     },
     onTriggerTap: () => {
       if (session?.running) return

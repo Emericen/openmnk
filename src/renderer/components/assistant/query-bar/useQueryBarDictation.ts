@@ -96,10 +96,10 @@ export function useQueryBarDictation({
             reader.readAsDataURL(audioBlob)
           })
 
-          const result = await window.openmnk.dictation.transcribe({
+          const result = (await window.bridge.invoke("transcribe", {
             audio: base64Audio,
             filename: "recording.webm",
-          })
+          })) as { success: boolean; text?: string; error?: string }
 
           if (!result.success) {
             const errorText = "error" in result ? result.error : "Unknown error"
@@ -188,16 +188,16 @@ export function useQueryBarDictation({
   }, [startDictation, stopDictation, uiPhase])
 
   useEffect(() => {
-    const unsubscribe = window.openmnk.dictation.onCommand((payload) => {
+    const unsubscribe = window.bridge.on("dictation", (raw) => {
+      const payload = raw as { type?: string }
       if (payload?.type === "start") {
         void startDictation()
-        return
       }
       if (payload?.type === "stop") {
         stopDictation()
       }
     })
-    return () => unsubscribe?.()
+    return () => unsubscribe()
   }, [startDictation, stopDictation])
 
   useEffect(() => {

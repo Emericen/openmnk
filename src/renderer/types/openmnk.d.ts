@@ -1,8 +1,8 @@
-import type { OpenmnkApi } from "../../shared/ipc-contract"
+import type { Bridge } from "../../shared/ipc-contract"
 
 declare global {
   interface Window {
-    openmnk: OpenmnkApi
+    bridge: Bridge
   }
 }
 

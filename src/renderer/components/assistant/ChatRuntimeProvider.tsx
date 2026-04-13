@@ -7,6 +7,22 @@ import {
 import { UIPhase, useChatRuntimeStore } from "@/store/chatRuntimeStore"
 import type { ChatMessage } from "../../../shared/ipc-contract"
 
+// Convert our ChatMessage to assistant-ui's format.
+// Command parts become text parts so assistant-ui doesn't complain.
+// The actual rendering of command parts is handled by our custom SystemMessage component
+// which reads directly from visibleMessages.
+function convertMessage(message: ChatMessage) {
+  return {
+    ...message,
+    content: message.content.map((part) => {
+      if (part.type === "command") {
+        return { type: "text" as const, text: part.description }
+      }
+      return part
+    }),
+  }
+}
+
 export default function ChatRuntimeProvider({
   children,
 }: {
@@ -19,11 +35,11 @@ export default function ChatRuntimeProvider({
   const runtime = useExternalStoreRuntime({
     isRunning: uiPhase === UIPhase.SUBMITTING,
     messages: visibleMessages,
-    convertMessage: useMemo(() => (message: ChatMessage) => message, []),
+    convertMessage: useMemo(() => convertMessage, []),
     onNew: async (message: AppendMessage) => {
       const textPart = message.content.find((part) => part.type === "text")
       if (!textPart || textPart.type !== "text") return
-      await sendMessage(textPart.text ?? "")
+      sendMessage(textPart.text ?? "")
     },
   })
 
