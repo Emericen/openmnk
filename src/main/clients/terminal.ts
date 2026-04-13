@@ -1,7 +1,7 @@
 import * as pty from "@lydell/node-pty"
 
 const SHELL = process.platform === "win32" ? "powershell.exe" : "bash"
-const TIMEOUT = 30_000
+const TIMEOUT = 180_000
 
 export function run(cmd: string, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve) => {

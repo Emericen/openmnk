@@ -61,12 +61,13 @@ app.whenReady().then(async () => {
   session = new Session(emit)
 
   ipcMain.on("session", (_event, command: SessionCommand) => {
+    if (!session) return
     if (command.type === "start") {
-      if (session!.running) return
-      void session!.start(randomUUID(), command.text, command.skill)
+      if (session.running) return
+      void session.start(randomUUID(), command.text, command.skill)
     }
     if (command.type === "cancel") {
-      session!.cancel()
+      session.cancel()
     }
   })
 
@@ -98,7 +99,6 @@ app.whenReady().then(async () => {
     },
     onEscape: () => {
       session?.cancel()
-      session = null
     },
   })
 

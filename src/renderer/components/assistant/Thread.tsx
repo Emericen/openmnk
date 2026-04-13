@@ -1,14 +1,24 @@
 import { ThreadPrimitive } from "@assistant-ui/react"
-import { useRef } from "react"
+import { useEffect, useRef } from "react"
 import { useChatRuntimeStore } from "@/store/chatRuntimeStore"
 import { QueryBar } from "./query-bar/QueryBar"
 import { AssistantMessage, SystemMessage, UserMessage } from "./ThreadMessages"
 
 export default function Thread() {
+  const visibleMessages = useChatRuntimeStore((s) => s.visibleMessages)
   const hasOlderMessages = useChatRuntimeStore((s) => s.hasOlderMessages)
   const loadOlderMessages = useChatRuntimeStore((s) => s.loadOlderMessages)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const loadingOlderRef = useRef(false)
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    requestAnimationFrame(() => {
+      viewport.scrollTop = viewport.scrollHeight
+    })
+  }, [visibleMessages])
 
   const onViewportScroll = () => {
     const viewport = viewportRef.current

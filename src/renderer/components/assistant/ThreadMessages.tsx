@@ -100,7 +100,7 @@ function CommandPart({ part }: { part: Extract<ChatMessagePart, { type: "command
       <summary className="m-0 text-sm leading-5 cursor-pointer text-muted-foreground hover:text-foreground/80 marker:text-muted-foreground/50">
         {part.description}
       </summary>
-      <pre className="mt-1 text-[11px] font-mono whitespace-pre-wrap break-words text-muted-foreground/70 bg-muted/40 rounded px-2 py-1.5 max-h-40 overflow-y-auto">
+      <pre className="mt-1 text-[11px] font-mono whitespace-pre-wrap break-all text-muted-foreground/70 bg-muted/40 rounded px-2 py-1.5 max-h-40 overflow-y-auto overflow-x-hidden">
         {`$ ${part.cmd}`}{part.output !== undefined ? `\n\n${part.output}` : ""}
       </pre>
     </details>
