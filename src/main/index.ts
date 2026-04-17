@@ -1,4 +1,3 @@
-import "dotenv/config"
 import { app, BrowserWindow, ipcMain, nativeTheme } from "electron"
 import fs from "fs/promises"
 import path from "path"
@@ -9,8 +8,7 @@ import {
   setTrayAppearance,
 } from "./windows/tray"
 import * as chat from "./windows/chat"
-import { ServerConnection } from "./clients/ws"
-import { transcribe } from "./clients/transcribe"
+import { ServerConnection } from "./clients/services"
 import type { SessionCommand } from "../types/ipc"
 
 type AppearanceMode = "light" | "dark" | "system"
@@ -72,7 +70,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  ipcMain.handle("transcribe", (_event, input) => transcribe(input))
+  ipcMain.handle("transcribe", (_event, input) => server.transcribe(input))
 
   // ------------------------- Startup -------------------------
 

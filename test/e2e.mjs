@@ -6,8 +6,37 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, "..")
 const screenshotDir = path.join(root, "test", "screenshots")
 
-async function sleep(ms) {
+function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
+}
+
+async function waitForGreeting(window, timeoutMs = 30000) {
+  console.log("Waiting for AI greeting...")
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    // Greeting is done when we have an assistant message and no Thinking...
+    const thinking = await window.locator("text=Thinking...").count()
+    const messages = await window.locator("[class*='assistant'], [class*='text-left']").count()
+    if (thinking === 0 && messages > 0) {
+      console.log("Greeting received!")
+      return true
+    }
+    await sleep(1000)
+  }
+  console.log("Greeting timeout — continuing anyway")
+  return false
+}
+
+async function waitForDone(window, timeoutMs = 120000) {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    // Definitive signal: textarea is enabled (not disabled)
+    const textarea = window.getByRole("textbox")
+    const disabled = await textarea.getAttribute("disabled")
+    if (disabled === null) return true
+    await sleep(2000)
+  }
+  return false
 }
 
 async function main() {
@@ -26,42 +55,28 @@ async function main() {
   console.log("Window opened:", await window.title())
   await sleep(2000)
 
-  // Step 1: take initial screenshot
+  // Step 1: wait for greeting from server
   await window.screenshot({ path: path.join(screenshotDir, "01-initial.png") })
-  console.log("Screenshot: 01-initial.png")
+  await waitForGreeting(window)
+  await window.screenshot({ path: path.join(screenshotDir, "02-greeting.png") })
 
   // Step 2: type first query and submit
-  const textarea = window.getByRole("textbox", { name: "Type your request..." })
+  const textarea = window.getByRole("textbox")
   await textarea.fill(
     'run 2 cmds. first one sleeps for 10s and echos "done". 2nd one runs ls. go'
   )
   await sleep(500)
-  await window.screenshot({ path: path.join(screenshotDir, "02-typed.png") })
-  console.log("Screenshot: 02-typed.png")
-
   await textarea.press("Enter")
   console.log("Submitted first query")
   await sleep(3000)
-  await window.screenshot({
-    path: path.join(screenshotDir, "03-running.png"),
-  })
-  console.log("Screenshot: 03-running.png")
+  await window.screenshot({ path: path.join(screenshotDir, "03-running.png") })
 
-  // Step 3: wait 5s then stop
+  // Step 3: wait 5s then stop via Escape key
   await sleep(2000)
   console.log("Stopping...")
-  // Find the stop button (Square icon button visible during SUBMITTING)
-  const stopButton = window.locator("button:has(svg)")
-  const buttons = await stopButton.all()
-  // The stop button should be the last button with an svg
-  if (buttons.length > 0) {
-    await buttons[buttons.length - 1].click()
-  }
+  await window.keyboard.press("Escape")
   await sleep(1000)
-  await window.screenshot({
-    path: path.join(screenshotDir, "04-stopped.png"),
-  })
-  console.log("Screenshot: 04-stopped.png")
+  await window.screenshot({ path: path.join(screenshotDir, "04-stopped.png") })
 
   // Step 4: type second query
   await sleep(1000)
@@ -72,29 +87,12 @@ async function main() {
   await textarea.press("Enter")
   console.log("Submitted second query")
 
-  // Wait for it to finish (poll for textarea to be enabled)
-  for (let i = 0; i < 60; i++) {
-    await sleep(2000)
-    await window.screenshot({
-      path: path.join(screenshotDir, `05-progress-${i}.png`),
-    })
-    console.log(`Screenshot: 05-progress-${i}.png`)
+  // Wait for completion
+  const done = await waitForDone(window)
+  console.log(done ? "Query finished!" : "Query timed out")
 
-    // Check if the send button is back (not the stop button)
-    // We detect this by checking if "Thinking..." text is gone
-    const thinking = await window.locator("text=Thinking...").count()
-    if (thinking === 0) {
-      // Also check no spinning loader
-      const spinning = await window.locator(".animate-spin").count()
-      if (spinning === 0) {
-        console.log("Query finished!")
-        break
-      }
-    }
-  }
-
-  await window.screenshot({ path: path.join(screenshotDir, "06-final.png") })
-  console.log("Screenshot: 06-final.png")
+  await window.screenshot({ path: path.join(screenshotDir, "05-final.png") })
+  console.log("Screenshot: 05-final.png")
 
   console.log("Closing app...")
   await app.close()
