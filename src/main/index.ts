@@ -9,9 +9,7 @@ import {
   setTrayAppearance,
 } from "./windows/tray"
 import * as chat from "./windows/chat"
-// TODO: re-enable for v2 — global hotkeys via iohook
-// import { createTriggerListener } from "./listener/trigger"
-import { Session } from "./clients/session"
+import { ServerConnection } from "./clients/ws"
 import { transcribe } from "./clients/transcribe"
 import type { SessionCommand } from "../types/ipc"
 
@@ -55,41 +53,26 @@ app.whenReady().then(async () => {
     setTrayAppearance(appearance)
   }
 
-  // ------------------------- Session -------------------------
+  // ------------------------- Server Connection -------------------------
 
-  const session = new Session((event) => chat.send("session", event))
-  await session.loadFromDisk()
+  const server = new ServerConnection((event) => chat.send("session", event))
 
   ipcMain.on("ready", () => {
     chat.markReady()
-    chat.send("session", { type: "history", messages: session.getHistory() })
+    // Connect to server — it will send history and/or greeting
+    server.connect()
   })
 
   ipcMain.on("session", (_event, command: SessionCommand) => {
     if (command.type === "start") {
-      if (session.running) return
-      void session.start(command.text)
+      server.startSession(command.text)
     }
-    if (command.type === "cancel") session.cancel()
+    if (command.type === "cancel") {
+      server.cancel()
+    }
   })
 
   ipcMain.handle("transcribe", (_event, input) => transcribe(input))
-
-  // TODO: re-enable for v2 — global hotkeys via iohook
-  // const trigger = await createTriggerListener({
-  //   onTriggerHoldStart: () => {
-  //     if (session.running || !chat.isVisible()) return
-  //     chat.send("dictation", { type: "start" })
-  //   },
-  //   onTriggerHoldEnd: () => {
-  //     if (session.running || !chat.isVisible()) return
-  //     chat.send("dictation", { type: "stop" })
-  //   },
-  //   onEscape: () => {
-  //     session.cancel()
-  //     chat.send("session", { type: "stop-requested" })
-  //   },
-  // })
 
   // ------------------------- Startup -------------------------
 
@@ -113,7 +96,7 @@ app.whenReady().then(async () => {
   })
 
   app.on("will-quit", () => {
-    // trigger.stop() // TODO: re-enable for v2
+    server.disconnect()
     destroyTray()
   })
 })
