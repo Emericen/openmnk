@@ -1,14 +1,16 @@
+import "dotenv/config"
 import { app, BrowserWindow, ipcMain, nativeTheme } from "electron"
 import fs from "fs/promises"
 import path from "path"
-import { electronApp, optimizer } from "@electron-toolkit/utils"
+import { electronApp, optimizer, is } from "@electron-toolkit/utils"
 import {
   createSystemTray,
   destroyTray,
   setTrayAppearance,
 } from "./windows/tray"
 import * as chat from "./windows/chat"
-import { ServerConnection } from "./clients/services"
+import { Session } from "./clients/session"
+import { transcribe } from "./clients/transcribe"
 import type { SessionCommand } from "../types/ipc"
 
 type AppearanceMode = "light" | "dark" | "system"
@@ -25,7 +27,11 @@ app.whenReady().then(async () => {
 
   // ------------------------- Settings -------------------------
 
-  const settingsPath = path.join(app.getPath("userData"), "settings.json")
+  const cacheDir = path.join(
+    is.dev ? app.getAppPath() : app.getPath("userData"),
+    ".cache"
+  )
+  const settingsPath = path.join(cacheDir, "settings.json")
   let appearance: AppearanceMode = "system"
 
   async function saveSettings() {
@@ -51,26 +57,25 @@ app.whenReady().then(async () => {
     setTrayAppearance(appearance)
   }
 
-  // ------------------------- Server Connection -------------------------
+  // ------------------------- Session -------------------------
 
-  const server = new ServerConnection((event) => chat.send("session", event))
+  const session = new Session((event) => chat.send("session", event))
+  await session.loadFromDisk()
 
   ipcMain.on("ready", () => {
     chat.markReady()
-    // Connect to server — it will send history and/or greeting
-    server.connect()
+    chat.send("session", { type: "history", messages: session.getHistory() })
   })
 
   ipcMain.on("session", (_event, command: SessionCommand) => {
     if (command.type === "start") {
-      server.startSession(command.text)
+      if (session.running) return
+      void session.start(command.text)
     }
-    if (command.type === "cancel") {
-      server.cancel()
-    }
+    if (command.type === "cancel") session.cancel()
   })
 
-  ipcMain.handle("transcribe", (_event, input) => server.transcribe(input))
+  ipcMain.handle("transcribe", (_event, input) => transcribe(input))
 
   // ------------------------- Startup -------------------------
 
@@ -94,7 +99,6 @@ app.whenReady().then(async () => {
   })
 
   app.on("will-quit", () => {
-    server.disconnect()
     destroyTray()
   })
 })

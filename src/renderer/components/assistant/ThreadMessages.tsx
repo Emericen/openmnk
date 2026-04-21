@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from "react"
 import { MessagePrimitive, useMessage } from "@assistant-ui/react"
 import { Loader2 } from "lucide-react"
 import ReactMarkdown, { type Components } from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { useChatRuntimeStore } from "@/store/chatRuntimeStore"
 import type { ChatMessagePart } from "../../../types/ipc"
 
@@ -64,6 +65,24 @@ const markdownComponents: Components = {
       {children}
     </pre>
   ),
+  table: ({ children }: MarkdownProps) => (
+    <div className="overflow-x-auto mb-4">
+      <table className="w-full text-sm border-collapse">{children}</table>
+    </div>
+  ),
+  thead: ({ children }: MarkdownProps) => (
+    <thead className="border-b border-border">{children}</thead>
+  ),
+  tbody: ({ children }: MarkdownProps) => <tbody>{children}</tbody>,
+  tr: ({ children }: MarkdownProps) => (
+    <tr className="border-b border-border/50">{children}</tr>
+  ),
+  th: ({ children }: MarkdownProps) => (
+    <th className="text-left font-semibold px-3 py-2 text-foreground">{children}</th>
+  ),
+  td: ({ children }: MarkdownProps) => (
+    <td className="px-3 py-2 text-foreground">{children}</td>
+  ),
 }
 
 export function UserMessage() {
@@ -83,7 +102,7 @@ export function AssistantMessage() {
         <MessagePrimitive.Parts
           components={{
             Text: ({ text }) => (
-              <ReactMarkdown components={markdownComponents}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {text}
               </ReactMarkdown>
             ),
