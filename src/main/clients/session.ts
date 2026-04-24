@@ -4,6 +4,7 @@ import { readFile, writeFile, mkdir, readdir } from "node:fs/promises"
 import { join, dirname } from "node:path"
 import { app } from "electron"
 import { is } from "@electron-toolkit/utils"
+import { homedir } from "node:os"
 import * as tools from "./tools"
 import type {
   ChatCompletionMessageParam,
@@ -13,8 +14,7 @@ import type { ChatMessage, SessionEvent } from "../../types/ipc"
 
 // Cloud mode: SERVER_URL set → proxy through our server
 // OSS mode: SERVER_URL not set → user provides their own key
-const SERVER_URL =
-  process.env.SERVER_URL || (is.dev ? "" : "https://api.openmnk.com")
+const SERVER_URL = process.env.SERVER_URL || ""
 const LLM_BASE_URL = SERVER_URL
   ? `${SERVER_URL}/v1`
   : process.env.LLM_BASE_URL || ""
@@ -24,13 +24,15 @@ const LLM_API_KEY = SERVER_URL
 const LLM_MODEL = process.env.LLM_MODEL || "claude-sonnet-4-6"
 const LLM_TEMPERATURE = parseFloat(process.env.LLM_TEMPERATURE || "0.0")
 const LLM_MAX_TOKENS = parseInt(process.env.LLM_MAX_TOKENS || "2048", 10)
+
+// Unified data directory: ~/.openmnk/
+const OPENMNK_HOME = join(homedir(), ".openmnk")
+
 const HISTORY_PATH = SERVER_URL
   ? ""  // cloud: server handles persistence
-  : join(is.dev ? app.getAppPath() : app.getPath("userData"), ".cache", "chat.json")
+  : join(OPENMNK_HOME, "sessions", "history.json")
 
-const KNOWLEDGE_DIR = is.dev
-  ? join(app.getAppPath(), "knowledge")
-  : join(process.resourcesPath, "knowledge")
+const KNOWLEDGE_DIR = join(OPENMNK_HOME, "knowledge")
 
 const DEFAULT_SYSTEM_MESSAGE = `You are a pragmatic desktop assistant that controls the user's computer via shell commands. Rules:
 - Between tool calls, keep text to one short plain-text sentence. No markdown.
@@ -170,7 +172,7 @@ export class Session {
       const systemMessage = await buildSystemMessage()
       const fullMessages: ChatCompletionMessageParam[] = [
         { role: "system", content: systemMessage },
-        ...this.messages,
+        ...this.compressMessagesForAPI(this.messages),
       ]
 
       const response = await this.openai.chat.completions.create(
@@ -278,6 +280,27 @@ export class Session {
         }
       }
     }
+  }
+
+  /**
+   * Compress old tool results to reduce token usage before sending to LLM.
+   * Keeps the last N messages intact; replaces older tool results with stubs.
+   */
+  private compressMessagesForAPI(
+    messages: ChatCompletionMessageParam[],
+    keepLast = 3
+  ): ChatCompletionMessageParam[] {
+    if (messages.length <= keepLast) return messages
+    return messages.map((m, i) => {
+      const isRecent = i >= messages.length - keepLast
+      if (!isRecent && m.role === "tool") {
+        return {
+          ...m,
+          content: `[tool_call_id: ${m.tool_call_id}] result completed, content truncated`,
+        }
+      }
+      return m
+    })
   }
 
   /** Convert OpenAI messages to ChatMessages for history */

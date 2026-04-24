@@ -19,7 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test",
-    "dist": "electron-vite build && electron-builder --mac"
+    "dist": "electron-vite build && electron-builder --mac --config ../packaging/electron-builder.yml"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.12.10",

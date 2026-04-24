@@ -1,5 +1,5 @@
 import { useAui } from "@assistant-ui/react"
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useChatRuntimeStore } from "@/store/chatRuntimeStore"
 import { UIPhase } from "@/store/chatRuntimeStore"
 
@@ -220,6 +220,19 @@ export function useQueryBarDictation({
     }
   }, [stopDictation, stopTracks])
 
+  const [transcriptionConfigured, setTranscriptionConfigured] = useState(false)
+
+  useEffect(() => {
+    window.bridge.invoke("transcribe-configured")
+      .then((result: unknown) => {
+        const r = result as { configured?: boolean }
+        setTranscriptionConfigured(!!r.configured)
+      })
+      .catch(() => setTranscriptionConfigured(false))
+  }, [])
+
+  const dictationUnavailable = !transcriptionConfigured
+
   return {
     resetComposerText() {
       aui.composer().setText("")
@@ -228,7 +241,9 @@ export function useQueryBarDictation({
     inputDisabled:
       uiPhase === UIPhase.SUBMITTING || uiPhase === UIPhase.TRANSCRIBING,
     dictationDisabled:
-      uiPhase === UIPhase.SUBMITTING || uiPhase === UIPhase.TRANSCRIBING,
+      uiPhase === UIPhase.SUBMITTING ||
+      uiPhase === UIPhase.TRANSCRIBING ||
+      dictationUnavailable,
     placeholder:
       uiPhase === UIPhase.DICTATING
         ? "Listening... Release Alt key to stop."
@@ -239,9 +254,11 @@ export function useQueryBarDictation({
             : "Type your request...",
     dictationTooltipText:
       uiPhase === UIPhase.DICTATING
-        ? "Stop (Releaes Alt key)"
+        ? "Stop (Release Alt key)"
         : uiPhase === UIPhase.TRANSCRIBING
           ? "Processing"
-          : "Dictate (Press Alt key)",
+          : dictationUnavailable
+            ? "Voice transcription not configured. Set TRANSCRIBE_BASE_URL and TRANSCRIBE_API_KEY in settings."
+            : "Dictate (Press Alt key)",
   }
 }

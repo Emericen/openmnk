@@ -2,7 +2,7 @@ import OpenAI from "openai"
 import { is } from "@electron-toolkit/utils"
 import type { DictationTranscribeResult } from "../../types/ipc"
 
-const SERVER_URL = process.env.SERVER_URL || (is.dev ? "" : "https://api.openmnk.com")
+const SERVER_URL = process.env.SERVER_URL || ""
 
 let client: OpenAI | null = null
 
