@@ -56,6 +56,30 @@ for i, page in enumerate(doc):
     pix = page.get_pixmap(dpi=200)
     pix.save(f"page_{i+1}.png")
 ```
+## Running long commands in background
+Commands that take more than a few seconds (filesystem scans, installs, servers) should be backgrounded so the chat UI doesn't block. Redirect output to a log file and run in background:
+
+```bash
+# Start — returns PID immediately, process runs in background
+cmd > ~/.openmnk/logs/task.log 2>&1 & echo $!
+
+# Check latest output
+tail -20 ~/.openmnk/logs/task.log
+
+# Check if still running
+ps -p <PID>
+
+# Kill it
+kill <PID>
+
+# Clean up log when done
+rm ~/.openmnk/logs/task.log
+```
+
+`>` redirects stdout to the log file. `2>&1` sends stderr there too. `&` backgrounds the process. `echo $!` prints the process ID so you can reference it later.
+
+Use judgment on when to background. Short commands (`ls`, `cat`, `echo`) run normally. Long commands (`find /`, `npm install`, `brew install`, servers) should be backgrounded.
+
 ## Browser interaction via AppleScript
 Use AppleScript to interact with the browser. You can open URLs, read page content, and manipulate the DOM through JavaScript injection.
 
