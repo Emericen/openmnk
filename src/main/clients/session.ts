@@ -30,7 +30,7 @@ const OPENMNK_HOME = join(homedir(), ".openmnk")
 
 const HISTORY_PATH = SERVER_URL
   ? ""  // cloud: server handles persistence
-  : join(OPENMNK_HOME, "sessions", "history.json")
+  : join(OPENMNK_HOME, "history.json")
 
 const KNOWLEDGE_DIR = join(OPENMNK_HOME, "knowledge")
 

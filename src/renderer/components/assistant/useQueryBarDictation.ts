@@ -27,6 +27,18 @@ export function useQueryBarDictation({
   const chunksRef = useRef<Blob[]>([])
   const selectionRef = useRef<SelectionRange | null>(null)
 
+  const [transcriptionConfigured, setTranscriptionConfigured] = useState(false)
+
+  useEffect(() => {
+    window.bridge
+      .invoke("transcribe-configured")
+      .then((result: unknown) => {
+        const r = result as { configured?: boolean }
+        setTranscriptionConfigured(!!r.configured)
+      })
+      .catch(() => setTranscriptionConfigured(false))
+  }, [])
+
   const formatInsertText = useCallback(
     (before: string, after: string, text: string) => {
       const needsLeadingSpace =
@@ -51,6 +63,10 @@ export function useQueryBarDictation({
 
   const startDictation = useCallback(async () => {
     if (uiPhase !== UIPhase.READY) return
+    if (!transcriptionConfigured) {
+      console.warn("[dictation] transcription not configured, skipping")
+      return
+    }
 
     try {
       const textarea = getComposerTextarea()
@@ -106,6 +122,13 @@ export function useQueryBarDictation({
             console.error(
               "[dictation] transcription failed:",
               errorText || "Unknown error"
+            )
+            const composer = aui.composer()
+            const currentText = composer.getState().text || ""
+            composer.setText(
+              currentText +
+                (currentText ? " " : "") +
+                `[Transcription failed: ${errorText}]`
             )
             return
           }
@@ -169,6 +192,7 @@ export function useQueryBarDictation({
     startTranscribingPhase,
     stopTracks,
     uiPhase,
+    transcriptionConfigured,
   ])
 
   const stopDictation = useCallback(() => {
@@ -184,14 +208,19 @@ export function useQueryBarDictation({
       return
     }
     if (uiPhase !== UIPhase.READY) return
+    if (!transcriptionConfigured) {
+      console.warn("[dictation] transcription not configured, skipping")
+      return
+    }
     await startDictation()
-  }, [startDictation, stopDictation, uiPhase])
+  }, [startDictation, stopDictation, uiPhase, transcriptionConfigured])
 
   // Hold Alt to dictate, release to stop
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Alt" || e.repeat) return
       if (uiPhase !== UIPhase.READY) return
+      if (!transcriptionConfigured) return
       e.preventDefault()
       void startDictation()
     }
@@ -207,7 +236,7 @@ export function useQueryBarDictation({
       window.removeEventListener("keydown", onKeyDown)
       window.removeEventListener("keyup", onKeyUp)
     }
-  }, [startDictation, stopDictation, uiPhase])
+  }, [startDictation, stopDictation, uiPhase, transcriptionConfigured])
 
   useEffect(() => {
     return () => {
@@ -219,17 +248,6 @@ export function useQueryBarDictation({
       stopTracks()
     }
   }, [stopDictation, stopTracks])
-
-  const [transcriptionConfigured, setTranscriptionConfigured] = useState(false)
-
-  useEffect(() => {
-    window.bridge.invoke("transcribe-configured")
-      .then((result: unknown) => {
-        const r = result as { configured?: boolean }
-        setTranscriptionConfigured(!!r.configured)
-      })
-      .catch(() => setTranscriptionConfigured(false))
-  }, [])
 
   const dictationUnavailable = !transcriptionConfigured
 
@@ -254,11 +272,11 @@ export function useQueryBarDictation({
             : "Type your request...",
     dictationTooltipText:
       uiPhase === UIPhase.DICTATING
-        ? "Stop (Release Alt key)"
+        ? "Stop (Release Alt)"
         : uiPhase === UIPhase.TRANSCRIBING
           ? "Processing"
           : dictationUnavailable
-            ? "Voice transcription not configured. Set TRANSCRIBE_BASE_URL and TRANSCRIBE_API_KEY in settings."
-            : "Dictate (Press Alt key)",
+            ? "Add API key to dictate"
+            : "Dictate (Press Alt)",
   }
 }

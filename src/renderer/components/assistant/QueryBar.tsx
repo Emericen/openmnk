@@ -1,4 +1,4 @@
-import { AuiIf, ComposerPrimitive } from "@assistant-ui/react"
+import { ComposerPrimitive, useAuiState } from "@assistant-ui/react"
 import { Loader2, Mic, MicOff, Pause, Send } from "lucide-react"
 import { useCallback, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
@@ -31,6 +31,8 @@ export function QueryBar() {
     placeholder,
     dictationTooltipText,
   } = useQueryBarDictation({ uiPhase, getComposerTextarea })
+
+  const composerEmpty = useAuiState((s) => s.composer.isEmpty)
 
   // Escape key to stop running session
   useEffect(() => {
@@ -104,25 +106,31 @@ export function QueryBar() {
                 {/* Dictation button — managed by our UIPhase store */}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-                      variant={
-                        uiPhase === UIPhase.DICTATING ? "destructive" : "ghost"
-                      }
-                      onClick={() => void toggleDictation()}
-                      disabled={dictationDisabled}
-                    >
-                      {uiPhase === UIPhase.DICTATING ? (
-                        <MicOff className="h-3.5 w-3.5" />
-                      ) : uiPhase === UIPhase.TRANSCRIBING ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Mic className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
+                    <span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        style={
+                          { WebkitAppRegion: "no-drag" } as React.CSSProperties
+                        }
+                        variant={
+                          uiPhase === UIPhase.DICTATING
+                            ? "destructive"
+                            : "ghost"
+                        }
+                        onClick={() => void toggleDictation()}
+                        disabled={dictationDisabled}
+                      >
+                        {uiPhase === UIPhase.DICTATING ? (
+                          <MicOff className="h-3.5 w-3.5" />
+                        ) : uiPhase === UIPhase.TRANSCRIBING ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Mic className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </span>
                   </TooltipTrigger>
                   <TooltipContent>{dictationTooltipText}</TooltipContent>
                 </Tooltip>
@@ -134,7 +142,9 @@ export function QueryBar() {
                         type="button"
                         size="sm"
                         className="h-7 w-7 p-0 bg-primary hover:bg-primary/90 text-primary-foreground"
-                        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                        style={
+                          { WebkitAppRegion: "no-drag" } as React.CSSProperties
+                        }
                         onClick={stop}
                       >
                         <Pause className="h-3.5 w-3.5 fill-current" />
@@ -145,16 +155,24 @@ export function QueryBar() {
                 ) : (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <ComposerPrimitive.Send
-                        className="inline-flex items-center justify-center h-7 w-7 p-0 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50"
-                        style={
-                          { WebkitAppRegion: "no-drag" } as React.CSSProperties
-                        }
-                      >
-                        <Send className="h-3.5 w-3.5" />
-                      </ComposerPrimitive.Send>
+                      <span>
+                        <ComposerPrimitive.Send
+                          className="inline-flex items-center justify-center h-7 w-7 p-0 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50"
+                          style={
+                            {
+                              WebkitAppRegion: "no-drag",
+                            } as React.CSSProperties
+                          }
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                        </ComposerPrimitive.Send>
+                      </span>
                     </TooltipTrigger>
-                    <TooltipContent>Submit (Enter)</TooltipContent>
+                    <TooltipContent>
+                      {composerEmpty
+                        ? "Type a message to submit"
+                        : "Submit (Enter)"}
+                    </TooltipContent>
                   </Tooltip>
                 )}
               </div>

@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import { electronApp, optimizer, is } from "@electron-toolkit/utils"
 import { homedir } from "node:os"
-import { copyFile, mkdir, readdir, stat } from "node:fs/promises"
+import { copyFile, readdir, stat } from "node:fs/promises"
 import {
   createSystemTray,
   destroyTray,
@@ -62,10 +62,7 @@ app.whenReady().then(async () => {
     const dirs = [
       openmnkHome,
       path.join(openmnkHome, "knowledge"),
-      path.join(openmnkHome, "skills"),
-      path.join(openmnkHome, "recordings"),
       path.join(openmnkHome, "logs"),
-      path.join(openmnkHome, "sessions"),
     ]
     for (const dir of dirs) {
       await fs.mkdir(dir, { recursive: true })
@@ -116,8 +113,8 @@ app.whenReady().then(async () => {
   ipcMain.handle("transcribe", (_event, input) => transcribe(input))
 
   ipcMain.handle("transcribe-configured", () => {
-    const baseURL = process.env.TRANSCRIBE_BASE_URL || process.env.LLM_BASE_URL || ""
-    const apiKey = process.env.TRANSCRIBE_API_KEY || process.env.LLM_API_KEY || ""
+    const baseURL = process.env.TRANSCRIBE_BASE_URL || ""
+    const apiKey = process.env.TRANSCRIBE_API_KEY || ""
     return { configured: !!(baseURL && apiKey) }
   })
 

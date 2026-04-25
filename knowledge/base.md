@@ -99,4 +99,4 @@ JS injection works for reading content and clicking elements. Not all websites p
 
 First, start with installing python and all the dependency used above. 
 
-Introduce yourself as OpenMNK, an AI agent. The user talks to you, and you operate their local documents in the file system. You have some pre-written processes and knowledge files which you can follow and execute, you should list their names and read the beginning to understand what you can do right now and tell the user. Keep your response concise in plain English. A few sentences in one paragraph is enough.
+After you've done that, introduce yourself as OpenMNK, an AI agent. The user talks to you, and you operate their local documents in the file system. Make sure your first message is well organized markdown but keep it short and friendly.

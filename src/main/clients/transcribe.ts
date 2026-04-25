@@ -8,8 +8,8 @@ let client: OpenAI | null = null
 
 function getClient(): OpenAI | null {
   if (client) return client
-  const baseURL = process.env.TRANSCRIBE_BASE_URL || process.env.LLM_BASE_URL
-  const apiKey = process.env.TRANSCRIBE_API_KEY || process.env.LLM_API_KEY
+  const baseURL = process.env.TRANSCRIBE_BASE_URL
+  const apiKey = process.env.TRANSCRIBE_API_KEY
   if (!baseURL || !apiKey) return null
   client = new OpenAI({ baseURL, apiKey })
   return client
