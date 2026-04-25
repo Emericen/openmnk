@@ -58,7 +58,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^35.1.5",
+    "electron": "^41.3.0",
     "electron-builder": "^26.8.1",
     "electron-notarize": "^1.2.2",
     "electron-rebuild": "^3.2.9",
