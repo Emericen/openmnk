@@ -45,9 +45,9 @@ async function buildSystemMessage(): Promise<string> {
     return DEFAULT_SYSTEM_MESSAGE
   }
 
-  // OSS: load s0_base.md + inject knowledge path
+  // OSS: load base.md + inject knowledge path
   try {
-    const base = await readFile(join(KNOWLEDGE_DIR, "s0_base.md"), "utf-8")
+    const base = await readFile(join(KNOWLEDGE_DIR, "base.md"), "utf-8")
     return base + `\n\nYour knowledge directory is: ${KNOWLEDGE_DIR}`
   } catch {
     return (
