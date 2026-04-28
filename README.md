@@ -7,21 +7,23 @@ Agent that operates your computer with only a terminal.
 ## Quick Start
 
 ```bash
-git clone git@github.com:Emericen/openmnk.git
-cd openmnk
-cp .env.example .env   # add your LLM provider URL, API key, and model name
-npm install
-npm run dev
+cp .env.example .env
 ```
 
-Optional: add `TRANSCRIBE_BASE_URL` and `TRANSCRIBE_API_KEY` to `.env` for voice dictation.
+Add your LLM provider URL, API key, and model name in the created `.env` file. Then run
+
+```bash
+npm install && npm run dev
+```
 
 ## How It Works
 
-OpenMNK loads one file into the AI: `knowledge/base.md`. This is the same pattern as Claude Code's `CLAUDE.md` or OpenClaw's `SOUL.md` — a markdown file that tells the agent who it is and how to behave.
+Terminal is all you need. One can use it to view any text file via `ls` and `cat` and etc. Launch long running processes and put it in the background while checking its log via saved `.log` file. Control OS level interfaces via Apple Script and PowerShell. Talk to browser on MacOS via Apple Script JSX, etc.
 
-From there, the agent does everything else itself. It checks `~/.openmnk/knowledge/` for skill files, reads them, installs any missing dependencies, and introduces itself. No plugin system, no skill registry — just `ls` and `cat`.
+OpenMNK's mission is to connect user to agent to terminal. 
 
-Features beyond the core agent ship as separate software. Office Bridge is its own project. Google Workspace CLI is its own project. The agent learns to use them from a skill file that says "here's how to call this via the terminal." The same way you'd hand someone a doc and say "read this, then do the thing."
+It has no plugin system. The only thing we load into the model context via software is its base knowledge in `base.md`. Additionally, the only tool it uses is the terminal (and `view_image` so it can use its vision modality)
 
-This is intentional. The terminal is the universal interface. The only software you need to build is the one that connects a human to an AI to a shell. Everything else is just knowledge.
+The agent does everything else itself. It checks `~/.openmnk/knowledge/` for written procedures, reads them, installs any missing dependencies, and introduces itself.
+
+Features beyond the core agent ship as separate software. The agent learns to use them from markdown files.
