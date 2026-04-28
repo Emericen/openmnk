@@ -208,8 +208,10 @@ export class Session {
 
       // No tool calls — final response
       if (toolCalls.length === 0) {
-        if (text)
-          this.emit({ type: "message", message: msg("assistant", text) })
+        this.emit({
+          type: "message",
+          message: msg("assistant", text || "Done — anything else?"),
+        })
         return
       }
 

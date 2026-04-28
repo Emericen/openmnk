@@ -31,7 +31,7 @@ app.whenReady().then(async () => {
 
   const openmnkHome = path.join(homedir(), ".openmnk")
   const settingsPath = path.join(openmnkHome, "settings.json")
-  let appearance: AppearanceMode = "system"
+  let appearance: AppearanceMode = "light"
 
   async function saveSettings() {
     await fs.mkdir(path.dirname(settingsPath), { recursive: true })
@@ -49,7 +49,7 @@ app.whenReady().then(async () => {
         (JSON.parse(raw) as { appearance?: AppearanceMode }).appearance ||
         "system"
     } catch {
-      appearance = "system"
+      appearance = "light"
     }
     nativeTheme.themeSource =
       appearance === "light" || appearance === "dark" ? appearance : "system"
