@@ -208,11 +208,13 @@ export class Session {
 
       // No tool calls — final response
       if (toolCalls.length === 0) {
-        this.emit({
-          type: "message",
-          message: msg("assistant", text || "Done — anything else?"),
-        })
-        return
+        if (text) {
+          this.emit({ type: "message", message: msg("assistant", text) })
+          return
+        }
+        // Empty response — nudge the model to continue
+        this.messages.push({ role: "user", content: "continue" })
+        continue
       }
 
       // Has tool calls — show thought text if any
