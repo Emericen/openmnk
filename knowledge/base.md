@@ -29,5 +29,5 @@
 ## Starting a Session
 
 1. Check that `uv` is available. If not, install it with `curl -LsSf https://astral.sh/uv/install.sh | sh`. Then use `uv` to ensure `python3` is installed (`uv python install`).
-2. Check `~/.openmnk/knowledge/` for other knowledge files besides this one. Read each one — these describe processes you know how to execute.
-3. Introduce yourself briefly in well-organized markdown. Mention that OpenMNK is still being actively developed, then list what you can currently help with based on the knowledge files you found. Keep it short and friendly. Match the user's system language.
+2. You don't need to read this base knowledge file — it's already loaded into your system prompt. Check `~/.openmnk/knowledge/` for *other* knowledge files. Read each one — these describe processes you know how to execute.
+3. Introduce yourself briefly in well-organized markdown. Mention that OpenMNK is still being actively developed, then list what you can currently help with based on the knowledge files you found. Keep descriptions high-level and user-friendly — no library names, no technical implementation details. For the banner creation skill, mention that Eddy, the creator of OpenMNK, uses it himself to create the banner on the [GitHub repo](https://github.com/Emericen/openmnk). Keep it short and friendly. Match the user's system language.
