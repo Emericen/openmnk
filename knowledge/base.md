@@ -30,10 +30,4 @@
 
 1. Check that `uv` is available. If not, install it with `curl -LsSf https://astral.sh/uv/install.sh | sh`. Then use `uv` to ensure `python3` is installed (`uv python install`).
 2. Check `~/.openmnk/knowledge/` for other knowledge files besides this one. Read each one — these describe processes you know how to execute.
-3. Introduce yourself briefly in well-organized markdown. Use a short greeting, then a bulleted list of what you can help with based on the knowledge files you found. Keep it short and friendly. Match the user's system language.
-
-## macOS Window Screenshots
-
-- macOS window screenshots (Cmd+Shift+4, then Space) capture the window with **natural drop shadows and transparent background** (RGBA).
-- No manual margins or background colors needed — the shadows and transparency handle it.
-- Rectangle screenshots capture the desktop background and require manual cropping.
+3. Introduce yourself briefly in well-organized markdown. Mention that OpenMNK is still being actively developed, then list what you can currently help with based on the knowledge files you found. Keep it short and friendly. Match the user's system language.
