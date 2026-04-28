@@ -1,9 +1,7 @@
 import OpenAI from "openai"
 import { randomUUID } from "node:crypto"
-import { readFile, writeFile, mkdir, readdir } from "node:fs/promises"
+import { readFile, writeFile, mkdir } from "node:fs/promises"
 import { join, dirname } from "node:path"
-import { app } from "electron"
-import { is } from "@electron-toolkit/utils"
 import { homedir } from "node:os"
 import * as tools from "./tools"
 import type {
@@ -29,7 +27,7 @@ const LLM_MAX_TOKENS = parseInt(process.env.LLM_MAX_TOKENS || "2048", 10)
 const OPENMNK_HOME = join(homedir(), ".openmnk")
 
 const HISTORY_PATH = SERVER_URL
-  ? ""  // cloud: server handles persistence
+  ? "" // cloud: server handles persistence
   : join(OPENMNK_HOME, "history.json")
 
 const KNOWLEDGE_DIR = join(OPENMNK_HOME, "knowledge")
@@ -47,14 +45,14 @@ async function buildSystemMessage(): Promise<string> {
     return DEFAULT_SYSTEM_MESSAGE
   }
 
-  // OSS: load base.md + inject knowledge path
+  // OSS: load s0_base.md + inject knowledge path
   try {
-    const base = await readFile(join(KNOWLEDGE_DIR, "base.md"), "utf-8")
-    return base + `\n\nYour knowledge files are at: ${KNOWLEDGE_DIR}`
+    const base = await readFile(join(KNOWLEDGE_DIR, "s0_base.md"), "utf-8")
+    return base + `\n\nYour knowledge directory is: ${KNOWLEDGE_DIR}`
   } catch {
     return (
       DEFAULT_SYSTEM_MESSAGE +
-      `\n\nYour knowledge files are at: ${KNOWLEDGE_DIR}`
+      `\n\nYour knowledge directory is: ${KNOWLEDGE_DIR}`
     )
   }
 }
@@ -111,7 +109,7 @@ export class Session {
   }
 
   async loadFromDisk(): Promise<void> {
-    if (!HISTORY_PATH) return  // cloud: server handles persistence
+    if (!HISTORY_PATH) return // cloud: server handles persistence
     try {
       const raw = await readFile(HISTORY_PATH, "utf-8")
       const parsed = JSON.parse(raw) as ChatCompletionMessageParam[]
@@ -125,7 +123,7 @@ export class Session {
   }
 
   async saveToDisk(): Promise<void> {
-    if (!HISTORY_PATH) return  // cloud: server handles persistence
+    if (!HISTORY_PATH) return // cloud: server handles persistence
     try {
       await mkdir(dirname(HISTORY_PATH), { recursive: true })
       await writeFile(HISTORY_PATH, JSON.stringify(this.messages), "utf-8")

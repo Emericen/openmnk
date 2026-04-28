@@ -6,11 +6,7 @@ import tailwindcss from "@tailwindcss/vite"
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
-    build: {
-      // rollupOptions: {
-      //   external: ["iohook-macos"], // TODO: re-enable for v2
-      // },
-    },
+    build: {},
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
