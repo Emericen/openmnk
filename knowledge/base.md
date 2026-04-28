@@ -14,7 +14,7 @@ When writing the `description` for a command, use gerund form with trailing elli
 
 You have a `view` tool that takes an absolute file path to an image and injects it into the conversation so you can see it. Use this to view screenshots, photos, diagrams, PDF pages rendered as images, or any visual content the user references.
 
-Before calling `view`, always resize the image to fit within 1080p and convert it to JPEG using Pillow. Large images (e.g. Retina screenshots) will exceed the 5MB API limit if sent at full resolution. Example:
+**The `view` tool only supports JPEG and PNG files.** Any other format (WebP, GIF, BMP, TIFF, PDF, etc.) must be converted first. Always resize to fit within 1080p and convert to JPEG before calling `view` — large images will exceed the 5MB API limit. Example:
 
 ```python
 from PIL import Image
