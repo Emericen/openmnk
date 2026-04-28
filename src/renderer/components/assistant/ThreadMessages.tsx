@@ -88,7 +88,7 @@ const markdownComponents: Components = {
 export function UserMessage() {
   return (
     <MessagePrimitive.Root className="flex w-full justify-end px-6 py-1">
-      <div className="max-w-[75%] rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-3 text-base leading-normal">
+      <div className="max-w-[75%] rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-3 text-base leading-normal break-words overflow-hidden">
         <MessagePrimitive.Content />
       </div>
     </MessagePrimitive.Root>
