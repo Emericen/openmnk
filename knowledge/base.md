@@ -30,6 +30,8 @@ img.save("/tmp/openmnk_view.jpg", "JPEG", quality=85)
 ```
 Then call `view` with the resized path. Clean up temp files when done.
 
+**Note:** The image you see after resizing is not the original resolution. If pixel dimensions matter (e.g. reading coordinates, measuring sizes), check the original image dimensions separately before resizing.
+
 ## Starting a session
 
 1. Check that `uv` is available. If not, install it with `curl -LsSf https://astral.sh/uv/install.sh | sh`. Then use `uv` to ensure `python3` is installed (`uv python install`).
