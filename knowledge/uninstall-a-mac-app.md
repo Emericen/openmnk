@@ -20,11 +20,14 @@ Ask the user which app they want to uninstall. If they already told you, skip th
     - `~/Library/LaunchAgents/`
     - `/Library/LaunchAgents/`
     - `/Library/LaunchDaemons/`
-4. Present everything you found as a single list. Tell the user the path and size of each item.
-5. Ask the user for permission to delete all of them at once.
-6. Delete and confirm cleanup is complete.
+4. **Present everything you found as a single list.** Tell the user the path and size of each item.
+5. **STOP. Ask the user for explicit permission to delete all of them at once.** Do not proceed to deletion until the user confirms.
+6. Only after the user says yes, delete and confirm cleanup is complete.
+
+## ⚠️ CRITICAL RULE
+
+**NEVER delete files without first showing the user the full list of found items and getting their explicit confirmation.** This is mandatory — no exceptions, even if the list is short or the files seem obviously related to the app.
 
 ## Notes
 
 - If the app has its own uninstaller, use that instead.
-- Never delete files without showing the user the full list and getting confirmation first.
