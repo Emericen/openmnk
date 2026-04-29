@@ -1,5 +1,7 @@
 # Banner Creation Procedure
 
+OpenMNK's Author Eddy uses this process to create the banner image on the github repo :)
+
 ## Overview
 Create side-by-side banner images from macOS window screenshots. The screenshots have built-in shadows and transparency (alpha channel), so no manual margin or background color needs to be added.
 
