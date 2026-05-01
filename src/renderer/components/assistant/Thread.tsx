@@ -21,7 +21,7 @@ export default function Thread() {
     <ThreadPrimitive.Root className="flex flex-col h-full min-h-0">
       <ThreadPrimitive.Viewport
         ref={viewportRef}
-        className="flex-1 min-h-0 overflow-y-auto pt-12 pb-28"
+        className="flex-1 min-h-0 overflow-y-auto pt-12 pb-4"
       >
         <ThreadPrimitive.Empty>
           <div className="h-full flex items-start justify-center pt-6 text-muted-foreground text-3xl px-6">

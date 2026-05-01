@@ -80,7 +80,7 @@ export function QueryBar() {
   }, [focusInput])
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-background p-4">
+    <div className="shrink-0 bg-background p-4">
       <div className="max-w-4xl mx-auto w-full" ref={composerRef}>
         <ComposerPrimitive.Root>
           <Card className="relative flex flex-col p-2 bg-card dark:bg-zinc-700/50 border border-border">

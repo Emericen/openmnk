@@ -1,6 +1,6 @@
 import type { ChatMessage } from "../../types/ipc"
 
-const MAX_MESSAGES = 500
+const MAX_MESSAGES = 100
 const THINKING_ID = "__thinking__"
 const THINKING_MSG: ChatMessage = {
   id: THINKING_ID,

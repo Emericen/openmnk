@@ -11,7 +11,7 @@ type MarkdownLinkProps = { href?: string; children?: ReactNode }
 
 const markdownComponents: Components = {
   p: ({ children }: MarkdownProps) => (
-    <p className="text-base text-foreground leading-normal mb-4 last:mb-0">
+    <p className="text-base text-foreground leading-normal mb-4 last:mb-0 break-words [overflow-wrap:anywhere]">
       {children}
     </p>
   ),
@@ -39,17 +39,17 @@ const markdownComponents: Components = {
     </ol>
   ),
   li: ({ children }: MarkdownProps) => (
-    <li className="text-base text-foreground leading-normal">{children}</li>
+    <li className="text-base text-foreground leading-normal break-words [overflow-wrap:anywhere]">{children}</li>
   ),
   code: ({ children }: MarkdownProps) => (
-    <code className="bg-muted px-1 py-0.5 rounded text-sm font-mono text-foreground">
+    <code className="bg-muted px-1 py-0.5 rounded text-sm font-mono text-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
       {children}
     </code>
   ),
   a: ({ href, children }: MarkdownLinkProps) => (
     <a
       href={href}
-      className="text-blue-600 underline"
+      className="text-blue-600 underline break-words [overflow-wrap:anywhere]"
       target="_blank"
       rel="noreferrer"
       onClick={(e) => {
@@ -61,7 +61,7 @@ const markdownComponents: Components = {
     </a>
   ),
   pre: ({ children }: MarkdownProps) => (
-    <pre className="bg-muted p-3 rounded mb-4 overflow-x-auto text-foreground font-mono">
+    <pre className="bg-muted p-3 rounded mb-4 overflow-x-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-foreground font-mono [&_code]:bg-transparent [&_code]:p-0 [&_code]:rounded-none">
       {children}
     </pre>
   ),
@@ -78,10 +78,10 @@ const markdownComponents: Components = {
     <tr className="border-b border-border/50">{children}</tr>
   ),
   th: ({ children }: MarkdownProps) => (
-    <th className="text-left font-semibold px-3 py-2 text-foreground">{children}</th>
+    <th className="text-left font-semibold px-3 py-2 text-foreground break-words [overflow-wrap:anywhere]">{children}</th>
   ),
   td: ({ children }: MarkdownProps) => (
-    <td className="px-3 py-2 text-foreground">{children}</td>
+    <td className="px-3 py-2 text-foreground break-words [overflow-wrap:anywhere]">{children}</td>
   ),
 }
 
@@ -116,7 +116,7 @@ export function AssistantMessage() {
 function CommandPart({ part }: { part: Extract<ChatMessagePart, { type: "command" }> }) {
   return (
     <details>
-      <summary className="m-0 text-sm leading-5 cursor-pointer text-muted-foreground hover:text-foreground/80 marker:text-muted-foreground/50">
+      <summary className="m-0 text-sm leading-5 cursor-pointer text-muted-foreground hover:text-foreground/80 marker:text-muted-foreground/50 break-words [overflow-wrap:anywhere]">
         {part.description}
       </summary>
       <pre className="mt-1 text-[11px] font-mono whitespace-pre-wrap break-all text-muted-foreground/70 bg-muted/40 rounded px-2 py-1.5 max-h-40 overflow-y-auto overflow-x-hidden">
@@ -155,7 +155,7 @@ export function SystemMessage() {
 
   return (
     <MessagePrimitive.Root className="w-full px-6 py-0">
-      <div className="max-w-[90%] grid grid-cols-[16px_1fr] gap-3">
+      <div className="max-w-[90%] grid grid-cols-[16px_minmax(0,1fr)] gap-3">
         <div className="relative flex justify-center">
           <div className="absolute top-0 h-1.5 w-px bg-muted-foreground/30" />
           {!isLastProgress ? (
@@ -167,7 +167,7 @@ export function SystemMessage() {
             <div className="relative mt-2 h-2.5 w-2.5 rounded-full border border-muted-foreground/65 bg-background" />
           )}
         </div>
-        <div className="pb-1.5 pt-1">
+        <div className="pb-1.5 pt-1 min-w-0">
           {parts.map((part, i) => {
             if (part.type === "command") {
               return <CommandPart key={i} part={part} />
@@ -177,7 +177,7 @@ export function SystemMessage() {
               return (
                 <p
                   key={i}
-                  className={`m-0 text-sm leading-5 ${
+                  className={`m-0 text-sm leading-5 break-words [overflow-wrap:anywhere] ${
                     isInterrupt ? "text-red-400" : "text-muted-foreground"
                   }`}
                 >

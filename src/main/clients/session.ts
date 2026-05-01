@@ -20,7 +20,7 @@ const LLM_API_KEY = SERVER_URL
   ? "openmnk" // server handles real key
   : process.env.LLM_API_KEY || ""
 const LLM_MODEL = process.env.LLM_MODEL || "claude-sonnet-4-6"
-const LLM_TEMPERATURE = parseFloat(process.env.LLM_TEMPERATURE || "0.0")
+const LLM_TEMPERATURE = parseFloat(process.env.LLM_TEMPERATURE || "1.0")
 const LLM_MAX_TOKENS = parseInt(process.env.LLM_MAX_TOKENS || "2048", 10)
 
 // Unified data directory: ~/.openmnk/
@@ -77,6 +77,27 @@ function cmdMsg(
     id: randomUUID(),
     role: "system",
     content: [{ type: "command", description, cmd, output }],
+  }
+}
+
+function toolDisplay(
+  name: string,
+  args: Record<string, string>
+): { description: string; cmd: string } {
+  const cmd = String(args.cmd || args.path || name)
+
+  if (name === "view" && args.path) {
+    const path = String(args.path)
+    return {
+      description: `Viewing image:
+${path}`,
+      cmd: path,
+    }
+  }
+
+  return {
+    description: String(args.description || name),
+    cmd,
   }
 }
 
@@ -230,14 +251,11 @@ export class Session {
           args = {}
         }
 
-        const cmd = String(args.cmd || args.path || tc.function.name)
+        const { description, cmd } = toolDisplay(tc.function.name, args)
 
         try {
           // Emit loading command (no output yet)
-          const loadingMsg = cmdMsg(
-            String(args.description || tc.function.name),
-            cmd
-          )
+          const loadingMsg = cmdMsg(description, cmd)
           this.emit({ type: "message", message: loadingMsg })
 
           const result = await tools.execute(
@@ -355,13 +373,8 @@ export class Session {
           try {
             args = JSON.parse(tc.function.arguments)
           } catch {}
-          result.push(
-            cmdMsg(
-              String(args.description || tc.function.name),
-              String(args.cmd || args.path || tc.function.name),
-              toolOutputs.get(tc.id)
-            )
-          )
+          const { description, cmd } = toolDisplay(tc.function.name, args)
+          result.push(cmdMsg(description, cmd, toolOutputs.get(tc.id)))
         }
       }
     }
